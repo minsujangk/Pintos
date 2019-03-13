@@ -133,4 +133,17 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+
+struct thread_sleep_info {
+  struct thread* t;
+  int64_t target_ticks;
+  struct list_elem elem;
+};
+
+void thread_sleep(int64_t target_ticks);
+void thread_wake(struct thread_sleep_info *info);
+void thread_check_sleepers();
+void thread_check_priority (int priority) ;
+bool thread_compare_priority(struct list_elem *e_a, struct list_elem *e_b) ;
+
 #endif /* threads/thread.h */

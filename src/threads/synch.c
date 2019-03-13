@@ -69,7 +69,8 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
+      list_insert_ordered(&sema->waiters, &thread_current()->elem, thread_compare_priority, NULL);
+      // list_push_back (&sema->waiters, &thread_current ()->elem);
       thread_block ();
     }
   sema->value--;
@@ -114,10 +115,20 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  struct thread *t = NULL;
+  if (!list_empty (&sema->waiters)) {
+      t = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
+      // list_remove(&t->elem);
+      thread_unblock (t);
+      // printf("this pri:%d, switch to: %d\n", thread_get_priority(), t->priority);
+      // thread_check_priority(t->priority);
+    }
   sema->value++;
+
+  // sema->value++ 이전에 하면 자신을 다시 block해버려서 이후에 실행.
+  if(t != NULL)
+    thread_check_priority (t->priority);
+
   intr_set_level (old_level);
 }
 
@@ -179,6 +190,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  lock->is_donated = false;
   sema_init (&lock->semaphore, 1);
 }
 
@@ -196,6 +208,17 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
+
+  if (lock->holder != NULL) {
+    // someone is holding lock
+    if (lock->holder->priority < thread_get_priority()) {
+      if (lock->is_donated != true) { // 처음 donate 되는 거라면
+        lock->orig_priority = lock->holder->priority;
+        lock->is_donated = true;
+      }
+      lock->holder->priority = thread_get_priority();
+    }
+  }
 
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
@@ -233,6 +256,10 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  if (lock->is_donated) {
+    lock->holder->priority = lock->orig_priority;
+    lock->is_donated = false;
+  }
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
