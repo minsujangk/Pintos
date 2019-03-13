@@ -53,3 +53,6 @@ dkms.conf
 
 ._*
 .DS_Store
+src/threads/build/
+src/threads/bochsout.txt
+src/threads/bochsrc.txt
