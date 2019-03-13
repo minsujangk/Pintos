@@ -386,7 +386,9 @@ thread_locks_max_priority (struct thread *t) {
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  int locks_max_priority = thread_locks_max_priority(thread_current());
+  if (locks_max_priority < new_priority)
+    thread_current ()->priority = new_priority;
   thread_current ()->orig_priority = new_priority;
   if (!list_empty(&ready_list))
     thread_check_priority(thread_ready_max_priority ());
