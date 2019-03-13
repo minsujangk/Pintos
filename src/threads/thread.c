@@ -30,12 +30,6 @@
 static struct list ready_list;
 static struct list sleep_list; // a list for struct thread_sleep_info
 
-// struct thread_sleep_info {
-//   struct thread* t;
-//   int64_t target_ticks;
-//   struct list_elem elem;
-// };
-
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -373,11 +367,27 @@ thread_ready_max_priority () {
   return list_entry(list_front(&ready_list), struct thread, elem)->priority;
 }
 
+int
+thread_locks_max_priority (struct thread *t) {
+  struct list_elem *e;
+  int max_priority = -1;
+  for (e=list_begin(&t->locks); e!=list_end(&t->locks); e=list_next(e)) {
+    struct lock *lock = list_entry(e, struct lock, elem);
+    if(list_empty(&lock->semaphore.waiters)) continue;
+    int lock_max_priority = list_entry(list_front(&lock->semaphore.waiters), struct thread, elem)->priority;
+    if (max_priority < lock_max_priority) {
+      max_priority = lock_max_priority;
+    }
+  }
+  return max_priority;
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  thread_current ()->orig_priority = new_priority;
   if (!list_empty(&ready_list))
     thread_check_priority(thread_ready_max_priority ());
 }
@@ -510,7 +520,10 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->orig_priority = priority;
   t->magic = THREAD_MAGIC;
+
+  list_init(&t->locks);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

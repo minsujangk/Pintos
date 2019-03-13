@@ -118,10 +118,7 @@ sema_up (struct semaphore *sema)
   struct thread *t = NULL;
   if (!list_empty (&sema->waiters)) {
       t = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
-      // list_remove(&t->elem);
       thread_unblock (t);
-      // printf("this pri:%d, switch to: %d\n", thread_get_priority(), t->priority);
-      // thread_check_priority(t->priority);
     }
   sema->value++;
 
@@ -190,7 +187,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
-  lock->is_donated = false;
+  // lock->is_donated = false;
   sema_init (&lock->semaphore, 1);
 }
 
@@ -212,16 +209,13 @@ lock_acquire (struct lock *lock)
   if (lock->holder != NULL) {
     // someone is holding lock
     if (lock->holder->priority < thread_get_priority()) {
-      if (lock->is_donated != true) { // 처음 donate 되는 거라면
-        lock->orig_priority = lock->holder->priority;
-        lock->is_donated = true;
-      }
       lock->holder->priority = thread_get_priority();
     }
   }
 
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+  list_push_back(&thread_current()->locks, &lock->elem);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -256,10 +250,22 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (lock->is_donated) {
-    lock->holder->priority = lock->orig_priority;
-    lock->is_donated = false;
-  }
+  list_remove(&lock->elem);
+
+  
+  if (list_empty(&thread_current()->locks)) {
+    thread_current()->priority = thread_current()->orig_priority;
+    }
+  else
+  {
+    // 아직 lock을 가지고 있다면.
+    int locks_max_priority = thread_locks_max_priority(thread_current());
+  // printf("locks priority %d, %d\n", locks_max_priority, thread_current()->orig_priority);
+    if (locks_max_priority < thread_current()->orig_priority)
+      thread_current()->priority = thread_current()->orig_priority;
+    else
+      thread_current()->priority = locks_max_priority;
+  } 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }

@@ -91,6 +91,8 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    struct list locks;
+    int orig_priority;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -145,5 +147,6 @@ void thread_wake(struct thread_sleep_info *info);
 void thread_check_sleepers();
 void thread_check_priority (int priority) ;
 bool thread_compare_priority(struct list_elem *e_a, struct list_elem *e_b) ;
+int thread_locks_max_priority (struct thread *t);
 
 #endif /* threads/thread.h */
