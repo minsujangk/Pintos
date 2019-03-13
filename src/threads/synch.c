@@ -211,12 +211,27 @@ lock_acquire (struct lock *lock)
     // someone is holding lock
     if (lock->holder->priority < thread_get_priority()) {
       lock->holder->priority = thread_get_priority();
+      lock_cascade_waiting_lock_priority(lock->holder);
     }
   }
 
+  thread_current()->waiting_lock = lock;
   sema_down (&lock->semaphore);
+  thread_current()->waiting_lock = NULL;
   lock->holder = thread_current ();
-  list_push_back(&thread_current()->locks, &lock->elem);
+  list_push_back(&thread_current()->holding_locks, &lock->elem);
+}
+
+void
+lock_cascade_waiting_lock_priority(struct thread *t) {
+  if (t->waiting_lock != NULL) {
+    struct thread *locking_thread = t->waiting_lock->holder;
+    if (locking_thread == NULL) return;
+    if (locking_thread->priority < t->priority) {
+      locking_thread->priority = t->priority;
+      lock_cascade_waiting_lock_priority(locking_thread);
+    }
+  }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -254,7 +269,7 @@ lock_release (struct lock *lock)
   list_remove(&lock->elem);
 
   
-  if (list_empty(&thread_current()->locks)) {
+  if (list_empty(&thread_current()->holding_locks)) {
     thread_current()->priority = thread_current()->orig_priority;
     }
   else

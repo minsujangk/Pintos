@@ -371,7 +371,7 @@ int
 thread_locks_max_priority (struct thread *t) {
   struct list_elem *e;
   int max_priority = -1;
-  for (e=list_begin(&t->locks); e!=list_end(&t->locks); e=list_next(e)) {
+  for (e=list_begin(&t->holding_locks); e!=list_end(&t->holding_locks); e=list_next(e)) {
     struct lock *lock = list_entry(e, struct lock, elem);
     if(list_empty(&lock->semaphore.waiters)) continue;
     int lock_max_priority = list_entry(list_front(&lock->semaphore.waiters), struct thread, elem)->priority;
@@ -521,9 +521,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->orig_priority = priority;
+  t->waiting_lock = NULL;
   t->magic = THREAD_MAGIC;
 
-  list_init(&t->locks);
+  list_init(&t->holding_locks);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

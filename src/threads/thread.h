@@ -91,7 +91,8 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    struct list locks;
+    struct list holding_locks;
+    struct lock *waiting_lock;
     int orig_priority;
 
 #ifdef USERPROG
