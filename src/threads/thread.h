@@ -95,6 +95,9 @@ struct thread
     struct lock *waiting_lock;
     int orig_priority;
 
+    int nice;
+    int recent_cpu_fp;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -149,5 +152,8 @@ void thread_check_sleepers();
 void thread_check_priority (int priority) ;
 bool thread_compare_priority(struct list_elem *e_a, struct list_elem *e_b) ;
 int thread_locks_max_priority (struct thread *t);
+
+struct list *mlfqs_queue;
+int thread_load_avg_fp;
 
 #endif /* threads/thread.h */
