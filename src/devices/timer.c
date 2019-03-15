@@ -139,10 +139,10 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
-
-  thread_check_sleepers(timer_ticks());
+  int64_t ticks = timer_ticks();
+  thread_check_sleepers(ticks);
   if (thread_mlfqs)
-    thread_refresh_mlfqs(timer_ticks());
+    thread_refresh_mlfqs(ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

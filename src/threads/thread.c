@@ -15,8 +15,6 @@
 #include "userprog/process.h"
 #endif
 
-#include "threads/fixed_pointer.h"
-
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -218,7 +216,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  if (!thread_mlfqs && priority > thread_get_priority())
+  if (priority > thread_get_priority())
     thread_yield();
 
   return tid;
@@ -281,10 +279,17 @@ void thread_sleep(int64_t target_ticks)
   struct thread_sleep_info info;
   info.t = thread_current();
   info.target_ticks = target_ticks;
-  list_push_back(&sleep_list, &info.elem);
+  list_insert_ordered(&sleep_list, &info.elem, thread_compare_sleep, NULL);
+  // list_push_back(&sleep_list, &info.elem);
   thread_block();
   
   intr_set_level (old_level);
+}
+
+bool thread_compare_sleep(struct list_elem *e_a, struct list_elem *e_b) {
+  struct thread_sleep_info *t_a = list_entry(e_a, struct thread_sleep_info, elem);
+  struct thread_sleep_info *t_b = list_entry(e_b, struct thread_sleep_info, elem);
+  return t_a->target_ticks < t_b->target_ticks;
 }
 
 void thread_wake(struct thread_sleep_info *info)
@@ -303,6 +308,8 @@ void thread_check_sleepers()
     if (timer_ticks() >= info->target_ticks)
     {
       thread_wake(info);
+    } else {
+      break;
     }
   }
 }
@@ -445,10 +452,11 @@ int thread_ready_count() {
 
 void
 thread_refresh_mlfqs(int64_t ticks) {
-  fadd_int(thread_current()->recent_cpu_fp, 1);
+  if (thread_current() != idle_thread)
+    thread_current()->recent_cpu_fp = fadd_int(thread_current()->recent_cpu_fp, 1);
   if (ticks%100 == 0) {
-    thread_refresh_load_avg();
     thread_all_refresh_recent_cpu();
+    thread_refresh_load_avg();
   }
   if (ticks%4 == 0) {
     thread_nice_all_refresh_priority();
@@ -468,7 +476,12 @@ struct thread *thread_mlfqs_pop() {
 
 void
 thread_refresh_load_avg() {
-  thread_load_avg_fp = fadd_int(fmul(thread_load_avg_fp, fdiv_int(int_to_fp(59), 60)), fmul_int(fdiv_int(int_to_fp(1), 60), thread_ready_count()));
+  // printf("load avg was=%d / ", fp_to_int_nearest(thread_load_avg_fp));
+  // printf("avg was=%d, multiplied avg=%d / ", fp_to_int_nearest(thread_load_avg_fp), fp_to_int_nearest(fmul(thread_load_avg_fp, fdiv_int(int_to_fp(59), 60))));
+  // printf("thread_count=%d, ready count=%d / ", thread_ready_count(), fp_to_int_nearest(fmul_int(fdiv_int(int_to_fp(1), 60), thread_ready_count())));
+  thread_load_avg_fp = fadd(fmul(thread_load_avg_fp, fdiv_int(int_to_fp(59), 60)), fmul_int(fdiv_int(int_to_fp(1), 60), thread_ready_count()));
+
+  // printf("load avg is now=%d \n", fp_to_int_nearest(thread_load_avg_fp));
 }
 
 void
@@ -477,6 +490,8 @@ thread_all_refresh_recent_cpu() {
   for (e=list_begin(&ready_list); e!=list_end(&ready_list); e=list_next(e)) {
     thread_refresh_recent_cpu(list_entry(e, struct thread, elem));
   }
+
+  thread_refresh_recent_cpu(thread_current());
   // int i=0;
   // for (i=63; i>=0; i--) {
   //   struct list *queue = &mlfqs_queue[i];
@@ -488,8 +503,15 @@ thread_all_refresh_recent_cpu() {
 
 void
 thread_refresh_recent_cpu(struct thread *t) {
-  int decay_fp = fdiv(fmul_int(thread_load_avg_fp, 2), fadd_int(fmul_int(thread_load_avg_fp, 2), 1));
-  t->recent_cpu_fp = fadd_int(fmul(decay_fp, t->recent_cpu_fp), t->nice);
+  fp decay_fp = fdiv(fmul_int(thread_load_avg_fp, 2), fadd_int(fmul_int(thread_load_avg_fp, 2), 1));
+  fp load_twice = fmul_int(thread_load_avg_fp, 2);
+  // printf("%s: prev recent cpu=%d; load twice=%d / ", t->name, fp_to_int_nearest(t->recent_cpu_fp), fp_to_int_nearest(load_twice));
+  fp recent_cpu_off = fdiv(fmul(t->recent_cpu_fp, load_twice), fadd_int(load_twice, 1));
+  // printf("middle value=%d, %d /", fp_to_int_nearest(fmul(t->recent_cpu_fp, load_twice)), fp_to_int_nearest(load_twice));
+  t->recent_cpu_fp = fadd_int(recent_cpu_off, t->nice);
+  // printf("%d, recent_cpu=%d\n", 
+  //   fp_to_int_nearest(recent_cpu_off * 100),
+  //   fp_to_int_nearest(t->recent_cpu_fp));
 }
 
 void
@@ -499,6 +521,8 @@ thread_nice_all_refresh_priority() {
   for (e=list_begin(&ready_list); e!=list_end(&ready_list); e=list_next(e)) {
     thread_nice_refresh_priority(list_entry(e, struct thread, elem));
   }
+
+  thread_nice_refresh_priority(thread_current());
 
   list_sort(&ready_list, thread_compare_priority, NULL);
   // int i=0;
@@ -519,6 +543,8 @@ thread_nice_refresh_priority(struct thread *t) {
   if (t->priority < PRI_MIN) t->priority = PRI_MIN;
   if (t->priority > PRI_MAX) t->priority = PRI_MAX;
 
+  // printf("%s: p=%d, n=%d\n", t->name, t->priority, fp_to_int_nearest(fdiv_int(t->recent_cpu_fp, 4)));
+
   // list_remove(&t->elem);
   // list_push_back(&mlfqs_queue[t->priority], &t->elem);
 }
@@ -531,6 +557,11 @@ thread_set_nice (int nice)
   thread_current()->nice = nice;
 
   thread_nice_refresh_priority(thread_current());
+  
+  list_sort(&ready_list, thread_compare_priority, NULL);
+  
+  if (!list_empty(&ready_list) && thread_get_priority() < thread_ready_max_priority())
+    thread_yield();
 }
 
 /* Returns the current thread's nice value. */
@@ -546,7 +577,7 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
-  return fp_to_int_nearest(fmul(thread_load_avg_fp, 100));
+  return fp_to_int_nearest(fmul_int(thread_load_avg_fp, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -554,7 +585,7 @@ int
 thread_get_recent_cpu (void) 
 {
   /* Not yet implemented. */
-  return fp_to_int_nearest(fmul(thread_current()->recent_cpu_fp, 100));
+  return fp_to_int_nearest(fmul_int(thread_current()->recent_cpu_fp, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -650,6 +681,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 
   t->nice = 0;
+  t->recent_cpu_fp = 0;
 
   list_init(&t->holding_locks);
 }

@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "fixed_pointer.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -96,7 +97,7 @@ struct thread
     int orig_priority;
 
     int nice;
-    int recent_cpu_fp;
+    fp recent_cpu_fp;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -152,8 +153,9 @@ void thread_check_sleepers();
 void thread_check_priority (int priority) ;
 bool thread_compare_priority(struct list_elem *e_a, struct list_elem *e_b) ;
 int thread_locks_max_priority (struct thread *t);
+bool thread_compare_sleep(struct list_elem *e_a, struct list_elem *e_b);
 
 struct list *mlfqs_queue;
-int thread_load_avg_fp;
+fp thread_load_avg_fp;
 
 #endif /* threads/thread.h */
