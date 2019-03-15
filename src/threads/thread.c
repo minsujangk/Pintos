@@ -258,7 +258,9 @@ thread_unblock (struct thread *t)
   // if (thread_mlfqs)
   //   list_push_back(&mlfqs_queue[t->priority], &t->elem);
   // else
-    list_insert_ordered(&ready_list, &t->elem, thread_compare_priority, NULL);
+  if (thread_mlfqs)
+    thread_nice_refresh_priority(t);
+  list_insert_ordered(&ready_list, &t->elem, thread_compare_priority, NULL);
   // list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -437,14 +439,6 @@ bool thread_compare_priority(struct list_elem *e_a, struct list_elem *e_b) {
 }
 
 int thread_ready_count() {
-  // int count = 0;
-  // int i = 0;
-  // for (i=63; i>=0; i--) {
-  //   struct list *queue = &mlfqs_queue[i];
-  //   if (!list_empty(queue))
-  //     printf("count");
-  //     count += list_size(queue); 
-  // }
   int count = list_size(&ready_list);
   if (thread_current() != idle_thread) count++;
   return count;
@@ -490,15 +484,12 @@ thread_all_refresh_recent_cpu() {
   for (e=list_begin(&ready_list); e!=list_end(&ready_list); e=list_next(e)) {
     thread_refresh_recent_cpu(list_entry(e, struct thread, elem));
   }
-
-  thread_refresh_recent_cpu(thread_current());
-  // int i=0;
-  // for (i=63; i>=0; i--) {
-  //   struct list *queue = &mlfqs_queue[i];
-  //   for (e=list_begin(queue); e != list_end(queue); e=list_next(e)) {
-  //     thread_refresh_recent_cpu(list_entry(e, struct thread, elem));
-  //   }
-  // }
+  
+  for (e=list_begin(&sleep_list); e!=list_end(&sleep_list); e=list_next(e)) {
+    thread_refresh_recent_cpu(list_entry(e, struct thread_sleep_info, elem)->t);
+  }
+  if (thread_current() != idle)
+    thread_refresh_recent_cpu(thread_current());
 }
 
 void
@@ -506,7 +497,8 @@ thread_refresh_recent_cpu(struct thread *t) {
   fp decay_fp = fdiv(fmul_int(thread_load_avg_fp, 2), fadd_int(fmul_int(thread_load_avg_fp, 2), 1));
   fp load_twice = fmul_int(thread_load_avg_fp, 2);
   // printf("%s: prev recent cpu=%d; load twice=%d / ", t->name, fp_to_int_nearest(t->recent_cpu_fp), fp_to_int_nearest(load_twice));
-  fp recent_cpu_off = fdiv(fmul(t->recent_cpu_fp, load_twice), fadd_int(load_twice, 1));
+  // fp recent_cpu_off = fdiv(fmul(t->recent_cpu_fp, load_twice), fadd_int(load_twice, 1));
+  fp recent_cpu_off = fmul(t->recent_cpu_fp, fdiv(load_twice, fadd_int(load_twice, 1)));
   // printf("middle value=%d, %d /", fp_to_int_nearest(fmul(t->recent_cpu_fp, load_twice)), fp_to_int_nearest(load_twice));
   t->recent_cpu_fp = fadd_int(recent_cpu_off, t->nice);
   // printf("%d, recent_cpu=%d\n", 
@@ -522,17 +514,15 @@ thread_nice_all_refresh_priority() {
     thread_nice_refresh_priority(list_entry(e, struct thread, elem));
   }
 
-  thread_nice_refresh_priority(thread_current());
+  if (thread_current() != idle_thread)
+    thread_nice_refresh_priority(thread_current());
 
   list_sort(&ready_list, thread_compare_priority, NULL);
-  // int i=0;
-  // for (i=63; i>=0; i--) {
-  //   struct list *queue = &mlfqs_queue[i];
-  //   for (e=list_begin(queue); e != list_end(queue); e=list_next(e)) {
-  //     thread_nice_refresh_priority(list_entry(e, struct thread, elem));
-  //   }
-  // }
-  // thread_yield();
+
+
+  if (!list_empty(&ready_list) && thread_get_priority() < thread_ready_max_priority())
+    if (intr_context()) intr_yield_on_return();
+    else thread_yield();
 }
 
 void
@@ -541,12 +531,9 @@ thread_nice_refresh_priority(struct thread *t) {
 
   // adjust range
   if (t->priority < PRI_MIN) t->priority = PRI_MIN;
-  if (t->priority > PRI_MAX) t->priority = PRI_MAX;
+  else if (t->priority > PRI_MAX) t->priority = PRI_MAX;
 
   // printf("%s: p=%d, n=%d\n", t->name, t->priority, fp_to_int_nearest(fdiv_int(t->recent_cpu_fp, 4)));
-
-  // list_remove(&t->elem);
-  // list_push_back(&mlfqs_queue[t->priority], &t->elem);
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -556,12 +543,13 @@ thread_set_nice (int nice)
   /* Not yet implemented. */
   thread_current()->nice = nice;
 
+  thread_refresh_recent_cpu(thread_current());
   thread_nice_refresh_priority(thread_current());
   
   list_sort(&ready_list, thread_compare_priority, NULL);
   
-  if (!list_empty(&ready_list) && thread_get_priority() < thread_ready_max_priority())
-    thread_yield();
+  // if (!list_empty(&ready_list) && thread_get_priority() < thread_ready_max_priority())
+  //   thread_yield();
 }
 
 /* Returns the current thread's nice value. */

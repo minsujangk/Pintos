@@ -139,7 +139,6 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
-  int64_t ticks = timer_ticks();
   thread_check_sleepers(ticks);
   if (thread_mlfqs)
     thread_refresh_mlfqs(ticks);
