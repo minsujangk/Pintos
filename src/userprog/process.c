@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+bool stack_save_arguments (void **esp, char **arg_tokens, int token_num, void **return_argv);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -30,6 +31,8 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+
+  printf("process_execute %s\n", file_name);
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -61,6 +64,8 @@ start_process (void *f_name)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
+  printf("start_process %s, %d\n", file_name, success);
+
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
@@ -88,8 +93,11 @@ start_process (void *f_name)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
+  printf("process wait/?\n");
+  // while(thread_tid() != child_tid){};
+  while(true){}
   return -1;
 }
 
@@ -197,7 +205,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, char **arg_tokens, int token_num, void **return_argv);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -217,10 +225,25 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
+  printf("load filename: %s\n", file_name);
+  char *token, *save_ptr;
+  char *arg_tokens[128];
+  int token_num = 0;
+  for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; 
+    token = strtok_r(NULL, " ", &save_ptr)) {
+      *(arg_tokens + token_num) = token;
+      printf("%s tokening\n", *(arg_tokens + token_num));
+      token_num++; 
+    }
+  void *argv[token_num + 1];
+  // stack_save_arguments(esp, arg_tokens, token_num, argv);
+
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
-  if (t->pagedir == NULL) 
+  if (t->pagedir == NULL) {
+    printf("ldfasd\n");
     goto done;
+  }
   process_activate ();
 
   /* Open executable file. */
@@ -304,7 +327,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, arg_tokens, token_num, argv))
     goto done;
 
   /* Start address. */
@@ -429,7 +452,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, char **arg_tokens, int token_num, void **return_argv) 
 {
   uint8_t *kpage;
   bool success = false;
@@ -438,8 +461,10 @@ setup_stack (void **esp)
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
+      if (success) {
         *esp = PHYS_BASE;
+        stack_save_arguments(esp, arg_tokens, token_num, return_argv);
+      }
       else
         palloc_free_page (kpage);
     }
@@ -465,3 +490,51 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+/**
+ * arg_tokens로 사용자가 넣어준 입력의 token들을 전달 받아서
+ * stack에 입력한 뒤 반환
+ * return:
+ *  return_argv: 각 arg의 주소가 담긴 배열
+ */
+bool
+stack_save_arguments (void **esp, char **arg_tokens, int token_num, void **return_argv) {
+  printf("saving stack in %p\n", *esp);
+  int i = 0;
+  char *token_p;
+  for (i = token_num - 1; i >= 0; i--) {
+    token_p = arg_tokens[i];
+    int length = strlen(token_p) + 1; // +1은 \0 저장하기 위함.
+    *esp = *esp - length;
+    strlcpy(*esp, token_p, length);
+    *(return_argv + i) = *esp;
+
+    printf("\"%s\" is in %p\n", *esp, *esp);
+  }
+
+  // protection
+  *(return_argv + token_num) = 0;
+
+  // word-align
+  void *word_align_ptr = *esp - (unsigned int) *esp % 4;
+  *esp = word_align_ptr;
+  printf("word align at %p\n", word_align_ptr);
+
+  // puting argv pointers
+  for (i = token_num; i >= 0; i--) {
+    *esp = *esp - sizeof(void*);
+    memcpy(*esp, return_argv + i, sizeof(void*));
+    printf("%p is in %p\n", *(void**)*esp, *esp);
+  }
+
+  //
+  void* argv = *esp;
+  *esp = *esp - sizeof(void*);
+  memcpy(*esp, &argv, sizeof(void*));
+  printf("%p is in %p\n", *(void**)*esp, *esp);
+
+  *esp = *esp - sizeof(unsigned int);
+  *(unsigned int*) *esp = token_num;
+  printf("%d is in %p\n", *(void**)*esp, *esp);
+}
+
