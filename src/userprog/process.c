@@ -527,14 +527,18 @@ stack_save_arguments (void **esp, char **arg_tokens, int token_num, void **retur
     printf("%p is in %p\n", *(void**)*esp, *esp);
   }
 
-  //
+  // store argv
   void* argv = *esp;
   *esp = *esp - sizeof(void*);
   memcpy(*esp, &argv, sizeof(void*));
   printf("%p is in %p\n", *(void**)*esp, *esp);
 
+  // store argc
   *esp = *esp - sizeof(unsigned int);
   *(unsigned int*) *esp = token_num;
   printf("%d is in %p\n", *(void**)*esp, *esp);
+
+  // store return addr
+  *esp = *esp - 4;
 }
 
