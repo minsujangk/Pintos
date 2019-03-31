@@ -56,6 +56,9 @@ syscall_handler (struct intr_frame *f)
     case SYS_WRITE:
       f->eax = write(arg_addr);
     break; 
+    case SYS_CLOSE:
+      close(arg_addr);
+    break;
     
   }
 }
@@ -69,6 +72,9 @@ void exit (void* esp) {
   if (!is_valid_pointer(esp, 0))
     status = -1;
   else status = *(int*) esp;
+
+  _close_all_fd();
+
   char *name;
   char *process_name = strtok_r(thread_current()->command_line, " ", &name);
   printf ("%s: exit(%d)\n", process_name, status);
@@ -193,6 +199,32 @@ int write (void *esp) {
   }
 
   return -1;
+}
+
+void close (void *esp) {
+  int fd = *(int*) esp;
+
+  struct list *fd_list = &thread_current()->fd_list;
+  struct list_elem *e, *next;
+  for (e=list_begin(fd_list); e!=list_end(fd_list); e=next) {
+    struct fd_file *ff = list_entry(e, struct fd_file, elem);
+    next = list_next(e);
+    if (ff->fd == fd) {
+      file_close(ff->file_ptr);
+      list_remove(&ff->elem);
+    }
+  }
+}
+
+void _close_all_fd (void) {
+  struct list *fd_list = &thread_current()->fd_list;
+  struct list_elem *e, *next;
+  for (e=list_begin(fd_list); e!=list_end(fd_list); e=next) {
+    struct fd_file *ff = list_entry(e, struct fd_file, elem);
+    next = list_next(e);
+    file_close(ff->file_ptr);
+    list_remove(&ff->elem);
+  }
 }
 
 bool is_valid_pointer (void *esp, int max_length) {
