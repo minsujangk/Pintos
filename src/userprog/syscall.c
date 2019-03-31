@@ -10,6 +10,7 @@
 #include "lib/string.h"
 #include "userprog/pagedir.h"
 #include "filesys/filesys.h"
+#include "threads/malloc.h"
 
 static void syscall_handler (struct intr_frame *);
 bool is_valid_pointer (void *esp, int max_dist);
@@ -41,6 +42,9 @@ syscall_handler (struct intr_frame *f)
     break;
     case SYS_CREATE:
       f->eax = create(arg_addr);
+    break;
+    case SYS_OPEN:
+      f->eax = open(arg_addr);
     break;
     case SYS_WRITE:
       f->eax = write(arg_addr);
@@ -80,6 +84,33 @@ create (void *esp) {
   // printf;("create is: %s\n", file_name);
 
   return filesys_create(file_name, initial_size);
+}
+
+// (const char *file)
+int open (void *esp) {
+  if (!is_valid_pointer(esp, 4)) exit(-1);
+
+  char *file_name = (char*) *(int*)esp;
+  if (!is_valid_pointer(file_name, 0))
+    exit(-1);
+
+  struct file *f = filesys_open(file_name);
+  if (f==NULL) return -1;
+  
+  int old_max_fd;
+  if (list_empty(&thread_current()->fd_list))
+    old_max_fd = 2;
+  else
+    old_max_fd = list_entry(list_front(&thread_current()->fd_list), struct fd_file, elem)->fd;
+
+  // printf("old max_fd is %d\n", old_max_fd);
+  struct fd_file *ff = malloc(sizeof(struct fd_file));
+  ff->fd = old_max_fd + 1;
+  ff->file_ptr = f;
+  list_push_front(&thread_current()->fd_list, &ff->elem);
+
+  // printf("file p=%p, fd=%d\n",f, ff->fd);
+  return ff->fd;
 }
 
 // (int fd, void *buffer, unsigned size)

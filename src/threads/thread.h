@@ -104,8 +104,10 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
+
     char command_line[128];
     struct semaphore process_lock;
+    struct list fd_list;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -161,6 +163,13 @@ bool thread_compare_sleep(struct list_elem *e_a, struct list_elem *e_b);
 struct list *mlfqs_queue;
 fp thread_load_avg_fp;
 
+/* Project 2 */
 struct semaphore* thread_get_process_lock(tid_t tid);
+
+struct fd_file {
+  int fd;
+  struct file *file_ptr;
+  struct list_elem elem;
+};
 
 #endif /* threads/thread.h */
