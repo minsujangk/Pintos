@@ -22,6 +22,9 @@ syscall_handler (struct intr_frame *f)
   printf ("system call! %d\n", syscall_num);
 
   switch(syscall_num) {
+    case SYS_EXIT:
+      exit(*(int*) arg_addr);
+    break;
     case SYS_WRITE:
       f->eax = write(arg_addr);
     break; 
@@ -43,4 +46,9 @@ int write (void *esp) {
     putbuf(buffer, size);
     return size;
   }
+}
+
+void exit (int status) {
+  printf ("%s: exit(%d)\n", thread_name(), status);
+  thread_exit();
 }
