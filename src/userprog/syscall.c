@@ -9,6 +9,7 @@
 #include "lib/stdio.h"
 #include "lib/string.h"
 #include "userprog/pagedir.h"
+#include "userprog/process.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "threads/malloc.h"
@@ -40,6 +41,9 @@ syscall_handler (struct intr_frame *f)
       halt();
     case SYS_EXIT:
       exit(arg_addr);
+    break;
+    case SYS_EXEC:
+      f->eax = exec(arg_addr);
     break;
     case SYS_CREATE:
       f->eax = create(arg_addr);
@@ -75,10 +79,39 @@ void exit (void* esp) {
 
   _close_all_fd();
 
+  struct list_elem *e, *next;
+  for (e=list_begin(&parent_child_list); e!=list_end(&parent_child_list); e=next) {
+    next=list_next(e);
+    struct child_status *cstat = list_entry(e, struct child_status, elem);
+    if (cstat->parent_pid == thread_tid()) {
+      list_remove(e);
+    }
+  }
+
   char *name;
   char *process_name = strtok_r(thread_current()->command_line, " ", &name);
   printf ("%s: exit(%d)\n", process_name, status);
   thread_exit();
+}
+
+tid_t exec (void *esp) {
+  char *cmd_line = (char*) *(int*) esp;
+
+  if(!is_valid_pointer(cmd_line, 0)) exit(-1);
+
+  tid_t pid = process_execute(cmd_line);
+  struct child_status *cstat = malloc(sizeof(struct child_status));
+  cstat->parent_pid = thread_tid();
+  cstat->child_pid = pid;
+  cstat->exit_status = 1000;
+  sema_init(&cstat->sema_start, 0);
+  
+  list_push_back(&parent_child_list, &cstat->elem);
+
+  sema_down(&cstat->sema_start); // wait for start process complete
+  pid = cstat->child_pid;
+  
+  return pid;
 }
 
 //(const char *file, unsigned initial_size)

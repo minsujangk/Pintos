@@ -69,10 +69,24 @@ start_process (void *f_name)
 
   if (isdebug) printf("start_process %s, %d\n", file_name, success);
 
+  struct list_elem *e;
+  for (e=list_begin(&parent_child_list); e!=list_end(&parent_child_list); e=list_next(e)) {
+    struct child_status *cstat = list_entry(e, struct child_status, elem);
+    if (cstat->child_pid == thread_tid()) {
+      if (!success) {
+        cstat->child_pid = -1;
+        cstat->exit_status = -1;
+      }
+      sema_up(&cstat->sema_start);
+      break;
+    }
+  }
+
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success) {
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in

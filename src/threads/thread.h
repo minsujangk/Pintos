@@ -172,4 +172,15 @@ struct fd_file {
   struct list_elem elem;
 };
 
+
+struct list parent_child_list;
+
+struct child_status {
+  int parent_pid;
+  int child_pid;
+  int exit_status;
+  struct semaphore sema_start;
+  struct list_elem elem;
+};
+
 #endif /* threads/thread.h */
