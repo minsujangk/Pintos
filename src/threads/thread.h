@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "fixed_pointer.h"
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -103,6 +104,7 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
+    struct semaphore process_lock;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -157,5 +159,7 @@ bool thread_compare_sleep(struct list_elem *e_a, struct list_elem *e_b);
 
 struct list *mlfqs_queue;
 fp thread_load_avg_fp;
+
+struct semaphore* thread_get_process_lock(tid_t tid);
 
 #endif /* threads/thread.h */

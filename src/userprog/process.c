@@ -17,6 +17,9 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
+
+bool isdebug = false;
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -32,7 +35,7 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
-  printf("process_execute %s\n", file_name);
+  if (isdebug) printf("process_execute %s\n", file_name);
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -64,7 +67,7 @@ start_process (void *f_name)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  printf("start_process %s, %d\n", file_name, success);
+  if (isdebug) printf("start_process %s, %d\n", file_name, success);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -95,9 +98,15 @@ start_process (void *f_name)
 int
 process_wait (tid_t child_tid) 
 {
-  printf("process wait/?\n");
+  if (isdebug) printf("process wait/? %s\n", thread_name());
+  struct semaphore *child_lock = thread_get_process_lock(child_tid);
+  if (child_lock != NULL){
+    if (isdebug) printf("go wait\n");
+    sema_down(child_lock);
+  }
+  if (isdebug) printf("process wait finished\n");
+  
   // while(thread_tid() != child_tid){};
-  while(true){}
   return -1;
 }
 
@@ -225,14 +234,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
-  printf("load filename: %s\n", file_name);
+  if (isdebug) printf("load filename: %s\n", file_name);
   char *token, *save_ptr;
   char *arg_tokens[128];
   int token_num = 0;
   for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; 
     token = strtok_r(NULL, " ", &save_ptr)) {
       *(arg_tokens + token_num) = token;
-      printf("%s tokening\n", *(arg_tokens + token_num));
+      if (isdebug) printf("%s tokening\n", *(arg_tokens + token_num));
       token_num++; 
     }
   void *argv[token_num + 1];
@@ -241,7 +250,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) {
-    printf("ldfasd\n");
+    if (isdebug) printf("ldfasd\n");
     goto done;
   }
   process_activate ();
@@ -250,7 +259,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file = filesys_open (file_name);
   if (file == NULL) 
     {
-      printf ("load: %s: open failed\n", file_name);
+      if (isdebug) printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
 
@@ -263,7 +272,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
-      printf ("load: %s: error loading executable\n", file_name);
+      if (isdebug) printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
 
@@ -499,7 +508,7 @@ install_page (void *upage, void *kpage, bool writable)
  */
 bool
 stack_save_arguments (void **esp, char **arg_tokens, int token_num, void **return_argv) {
-  printf("saving stack in %p\n", *esp);
+  if (isdebug) printf("saving stack in %p\n", *esp);
   int i = 0;
   char *token_p;
   for (i = token_num - 1; i >= 0; i--) {
@@ -509,7 +518,7 @@ stack_save_arguments (void **esp, char **arg_tokens, int token_num, void **retur
     strlcpy(*esp, token_p, length);
     *(return_argv + i) = *esp;
 
-    printf("\"%s\" is in %p\n", *esp, *esp);
+    if (isdebug) printf("\"%s\" is in %p\n", *esp, *esp);
   }
 
   // protection
@@ -518,25 +527,25 @@ stack_save_arguments (void **esp, char **arg_tokens, int token_num, void **retur
   // word-align
   void *word_align_ptr = *esp - (unsigned int) *esp % 4;
   *esp = word_align_ptr;
-  printf("word align at %p\n", word_align_ptr);
+  if (isdebug) printf("word align at %p\n", word_align_ptr);
 
   // puting argv pointers
   for (i = token_num; i >= 0; i--) {
     *esp = *esp - sizeof(void*);
     memcpy(*esp, return_argv + i, sizeof(void*));
-    printf("%p is in %p\n", *(void**)*esp, *esp);
+    if (isdebug) printf("%p is in %p\n", *(void**)*esp, *esp);
   }
 
   // store argv
   void* argv = *esp;
   *esp = *esp - sizeof(void*);
   memcpy(*esp, &argv, sizeof(void*));
-  printf("%p is in %p\n", *(void**)*esp, *esp);
+  if (isdebug) printf("%p is in %p\n", *(void**)*esp, *esp);
 
   // store argc
   *esp = *esp - sizeof(unsigned int);
   *(unsigned int*) *esp = token_num;
-  printf("%d is in %p\n", *(void**)*esp, *esp);
+  if (isdebug) printf("%d is in %p\n", *(void**)*esp, *esp);
 
   // store return addr
   *esp = *esp - 4;

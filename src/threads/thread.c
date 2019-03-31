@@ -198,6 +198,7 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  sema_down(&t->process_lock);
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -363,6 +364,7 @@ thread_exit (void)
   /* Just set our status to dying and schedule another process.
      We will be destroyed during the call to schedule_tail(). */
   intr_disable ();
+  sema_up(&thread_current()->process_lock);
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -389,6 +391,27 @@ thread_yield (void)
   curr->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
+}
+
+struct semaphore*
+thread_get_process_lock(tid_t tid){
+  struct list_elem *e;
+
+  for (e=list_begin(&ready_list); e!=list_end(&ready_list); e=list_next(e)) {
+    struct thread *t = list_entry(e, struct thread, elem);
+    if (t->tid == tid) return &t->process_lock;
+  }
+
+  for (e=list_begin(&sleep_list); e!=list_end(&sleep_list); e=list_next(e)) {
+    struct thread_sleep_info *info = list_entry(e, struct thread_sleep_info, elem);
+    if (info->t->tid == tid) return &info->t->process_lock;
+  }
+
+  if (thread_tid() == tid)
+    return &thread_current()->process_lock;
+
+  // maybe the thread had been already finished;;
+  return NULL;
 }
 
 int
@@ -667,6 +690,7 @@ init_thread (struct thread *t, const char *name, int priority)
   }
   t->waiting_lock = NULL;
   t->magic = THREAD_MAGIC;
+  sema_init(&t->process_lock, 1);
 
   t->nice = 0;
   t->recent_cpu_fp = 0;

@@ -19,7 +19,7 @@ syscall_handler (struct intr_frame *f)
 {
   int syscall_num =  *(int*) f->esp;
   void *arg_addr = f->esp + 4;
-  printf ("system call! %d\n", syscall_num);
+  // printf ("system call! %d\n", syscall_num);
 
   switch(syscall_num) {
     case SYS_EXIT:
