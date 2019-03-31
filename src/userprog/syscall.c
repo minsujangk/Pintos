@@ -181,6 +181,18 @@ int write (void *esp) {
     putbuf(buffer, size);
     return size;
   }
+  
+  struct list *fd_list = &thread_current()->fd_list;
+  struct list_elem *e;
+  for (e=list_begin(fd_list); e!=list_end(fd_list); e=list_next(e)) {
+    struct fd_file *ff = list_entry(e, struct fd_file, elem);
+    if (ff->fd == fd) {
+      file_write(ff->file_ptr, buffer, size);
+      return size;
+    }
+  }
+
+  return -1;
 }
 
 bool is_valid_pointer (void *esp, int max_length) {
