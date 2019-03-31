@@ -73,7 +73,7 @@ bool
 create (void *esp) {
   esp = esp+12; // temporary
 
-  if (!is_valid_pointer(esp, 8)) return false;
+  if (!is_valid_pointer(esp, 8)) exit(-1);
   // hex_dump(esp, esp, 100, 1);
   char *file_name = (char*) *(int*)(esp);
   // hex_dump(file_name, file_name, 32, 1);
@@ -117,8 +117,7 @@ int open (void *esp) {
 int write (void *esp) {
   esp = esp + 16; // temporary
 
-  if (!is_valid_pointer(esp, 12))
-    return -1;
+  if (!is_valid_pointer(esp, 12)) exit(-1);
 
   // hex_dump(esp, esp, 32, 1);
   int fd = *(int*) esp;
