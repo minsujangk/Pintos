@@ -9,6 +9,7 @@
 #include "lib/stdio.h"
 #include "lib/string.h"
 #include "userprog/pagedir.h"
+#include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "threads/malloc.h"
 
@@ -46,6 +47,12 @@ syscall_handler (struct intr_frame *f)
     case SYS_OPEN:
       f->eax = open(arg_addr);
     break;
+    case SYS_FILESIZE:
+      f->eax = filesize(arg_addr);
+    break;
+    case SYS_READ:
+      f->eax = read(arg_addr);
+    break; 
     case SYS_WRITE:
       f->eax = write(arg_addr);
     break; 
@@ -113,6 +120,49 @@ int open (void *esp) {
   return ff->fd;
 }
 
+int filesize (void *esp) {
+  int fd = *(int*) esp;
+
+  struct list *fd_list = &thread_current()->fd_list;
+  struct list_elem *e;
+  for (e=list_begin(fd_list); e!=list_end(fd_list); e=list_next(e)) {
+    struct fd_file *ff = list_entry(e, struct fd_file, elem);
+    if (ff->fd == fd) {
+      return file_length(ff->file_ptr);
+    }
+  }
+  return -1;
+}
+
+// read (int fd, void *buffer, unsigned size)
+int read (void *esp) {
+  esp = esp + 16;
+  
+  // hex_dump(esp, esp, 32, 1);
+  if (!is_valid_pointer(esp, 12)) exit(-1);
+
+  int fd = *(int*) esp;
+  void *buffer = *(void**) (esp + 4);
+  unsigned size = *(unsigned*) (esp + 8);
+
+  // printf("reading %d, %p, %d\n", fd, buffer, size);
+
+  // hex_dump(buffer, buffer, 32, 1);
+  if (!is_valid_pointer(buffer, size)) exit(-1);
+
+  struct list *fd_list = &thread_current()->fd_list;
+  struct list_elem *e;
+  for (e=list_begin(fd_list); e!=list_end(fd_list); e=list_next(e)) {
+    struct fd_file *ff = list_entry(e, struct fd_file, elem);
+    if (ff->fd == fd) {
+      file_read(ff->file_ptr, buffer, size);
+      return size;
+    }
+  }
+
+  return -1;
+}
+
 // (int fd, void *buffer, unsigned size)
 int write (void *esp) {
   esp = esp + 16; // temporary
@@ -122,8 +172,10 @@ int write (void *esp) {
   // hex_dump(esp, esp, 32, 1);
   int fd = *(int*) esp;
   void *buffer = *(void**) (esp + 4);
-  int size = *(unsigned*) (esp + 8);
+  unsigned size = *(unsigned*) (esp + 8);
   // printf("write started %d, %p, %d\n", fd, buffer, size);
+
+  if (!is_valid_pointer(buffer, size)) exit(-1);
 
   if (fd == 1) {
     putbuf(buffer, size);
