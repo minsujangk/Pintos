@@ -274,6 +274,7 @@ void close (void *esp) {
     if (ff->fd == fd) {
       file_close(ff->file_ptr);
       list_remove(&ff->elem);
+      free(ff);
     }
   }
 }
@@ -286,6 +287,7 @@ void _close_all_fd (void) {
     next = list_next(e);
     file_close(ff->file_ptr);
     list_remove(&ff->elem);
+    free(ff);
   }
 }
 
