@@ -119,6 +119,15 @@ process_wait (tid_t child_tid)
     sema_down(child_lock);
   }
   if (isdebug) printf("process wait finished\n");
+
+  struct list_elem *e, *next;
+  for (e=list_begin(&parent_child_list); e!=list_end(&parent_child_list); e=next) {
+    next=list_next(e);
+    struct child_status *cstat = list_entry(e, struct child_status, elem);
+    if (cstat->child_pid == child_tid) {
+      return cstat->exit_status;
+    }
+  }
   
   // while(thread_tid() != child_tid){};
   return -1;

@@ -45,6 +45,9 @@ syscall_handler (struct intr_frame *f)
     case SYS_EXEC:
       f->eax = exec(arg_addr);
     break;
+    case SYS_WAIT:
+      f->eax = wait(arg_addr);
+    break;
     case SYS_CREATE:
       f->eax = create(arg_addr);
     break;
@@ -86,6 +89,10 @@ void exit (void* esp) {
     if (cstat->parent_pid == thread_tid()) {
       list_remove(e);
     }
+    // update child status to later use in wait
+    else if (cstat->child_pid == thread_tid()) {
+      cstat->exit_status = status;
+    }
   }
 
   char *name;
@@ -112,6 +119,28 @@ tid_t exec (void *esp) {
   pid = cstat->child_pid;
   
   return pid;
+}
+
+int wait (void *esp) {
+  int pid = *(int*) esp;
+  struct list_elem *e, *next;
+  for (e=list_begin(&parent_child_list); e!=list_end(&parent_child_list); e=next) {
+    next=list_next(e);
+    struct child_status *cstat = list_entry(e, struct child_status, elem);
+    if (cstat->child_pid == pid) {
+      // if waiting found
+      // if (cstat->exit_status == -1) return -1;
+      if (cstat->exit_status != 1000) { 
+        list_remove(&cstat->elem);
+        return cstat->exit_status;
+      }
+      int result = process_wait(cstat->child_pid);
+      list_remove(&cstat->elem);
+      free(&cstat);
+      return result;
+    }
+  }
+  return -1;
 }
 
 //(const char *file, unsigned initial_size)

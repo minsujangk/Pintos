@@ -199,7 +199,7 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-  sema_down(&t->process_lock);
+  // sema_down(&t->process_lock);
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -692,7 +692,7 @@ init_thread (struct thread *t, const char *name, int priority)
   }
   t->waiting_lock = NULL;
   t->magic = THREAD_MAGIC;
-  sema_init(&t->process_lock, 1);
+  sema_init(&t->process_lock, 0);
   list_init(&t->fd_list);
 
   t->nice = 0;
