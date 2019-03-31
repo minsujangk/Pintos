@@ -7,6 +7,7 @@
 #include "lib/kernel/stdio.h"
 #include "lib/stdio.h"
 #include "lib/string.h"
+#include "userprog/pagedir.h"
 
 static void syscall_handler (struct intr_frame *);
 bool is_valid_pointer (void *esp, int max_dist);
@@ -20,6 +21,11 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
+  // syscall num stack is invalid.
+  if (!is_valid_pointer(f->esp, 0)) {
+    exit(-1);
+    return;
+  }
   int syscall_num =  *(int*) f->esp;
   void *arg_addr = f->esp + 4;
   // printf ("system call! %d\n", syscall_num);
@@ -67,8 +73,12 @@ void exit (void* esp) {
 
 bool is_valid_pointer (void *esp, int max_dist) {
   bool success = true;
+  // check both boundaries
+  if (!is_user_vaddr(esp) ||!is_user_vaddr((void *)(esp + max_dist + 3)) )
+    return false;
   
-  if ((void *)(esp + max_dist + 4) >= PHYS_BASE)
-    success = false;
+  if (pagedir_get_page(thread_current()->pagedir, esp) == NULL)
+    return false;
+
   return success;
 }
