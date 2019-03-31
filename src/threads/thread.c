@@ -681,6 +681,7 @@ init_thread (struct thread *t, const char *name, int priority)
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
+  strlcpy (t->command_line, name, strlen(name)+1);
   t->stack = (uint8_t *) t + PGSIZE;
   if (!thread_mlfqs) {
     t->priority = priority;

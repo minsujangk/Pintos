@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 #include "lib/kernel/stdio.h"
 #include "lib/stdio.h"
+#include "lib/string.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -49,6 +50,8 @@ int write (void *esp) {
 }
 
 void exit (int status) {
-  printf ("%s: exit(%d)\n", thread_name(), status);
+  char *name;
+  char *process_name = strtok_r(thread_current()->command_line, " ", &name);
+  printf ("%s: exit(%d)\n", process_name, status);
   thread_exit();
 }

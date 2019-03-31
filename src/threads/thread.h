@@ -104,6 +104,7 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
+    char command_line[128];
     struct semaphore process_lock;
 
     /* Owned by thread.c. */
