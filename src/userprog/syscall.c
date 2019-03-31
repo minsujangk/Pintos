@@ -3,11 +3,13 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "lib/kernel/stdio.h"
 #include "lib/stdio.h"
 #include "lib/string.h"
 
 static void syscall_handler (struct intr_frame *);
+bool is_valid_pointer (void *esp, int max_dist);
 
 void
 syscall_init (void) 
@@ -24,7 +26,7 @@ syscall_handler (struct intr_frame *f)
 
   switch(syscall_num) {
     case SYS_EXIT:
-      exit(*(int*) arg_addr);
+      exit(arg_addr);
     break;
     case SYS_WRITE:
       f->eax = write(arg_addr);
@@ -36,6 +38,9 @@ syscall_handler (struct intr_frame *f)
 // (int fd, void *buffer, unsigned size)
 int write (void *esp) {
   esp = esp + 16; // temporary
+
+  if (!is_valid_pointer(esp, 8))
+    return -1;
 
   // hex_dump(esp, esp, 32, 1);
   int fd = *(int*) esp;
@@ -49,9 +54,21 @@ int write (void *esp) {
   }
 }
 
-void exit (int status) {
+void exit (void* esp) {
+  int status;
+  if (!is_valid_pointer(esp, 0))
+    status = -1;
+  else status = *(int*) esp;
   char *name;
   char *process_name = strtok_r(thread_current()->command_line, " ", &name);
   printf ("%s: exit(%d)\n", process_name, status);
   thread_exit();
+}
+
+bool is_valid_pointer (void *esp, int max_dist) {
+  bool success = true;
+  
+  if ((void *)(esp + max_dist + 4) >= PHYS_BASE)
+    success = false;
+  return success;
 }
