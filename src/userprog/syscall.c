@@ -17,6 +17,8 @@
 static void syscall_handler (struct intr_frame *);
 bool is_valid_pointer (void *esp, int max_dist);
 bool create (void *esp);
+bool remove (void *esp);
+unsigned tell (void *esp);
 
 bool isdebug2 = false;
 
@@ -53,6 +55,9 @@ syscall_handler (struct intr_frame *f)
     case SYS_CREATE:
       f->eax = create(arg_addr);
     break;
+    case SYS_REMOVE:
+      f->eax = remove(arg_addr);
+    break;
     case SYS_OPEN:
       f->eax = open(arg_addr);
     break;
@@ -65,6 +70,12 @@ syscall_handler (struct intr_frame *f)
     case SYS_WRITE:
       f->eax = write(arg_addr);
     break; 
+    case SYS_SEEK:
+      seek(arg_addr);
+    break;
+    case SYS_TELL:
+      f->eax = tell(arg_addr);
+    break;
     case SYS_CLOSE:
       close(arg_addr);
     break;
@@ -169,6 +180,16 @@ create (void *esp) {
   return filesys_create(file_name, initial_size);
 }
 
+// bool remove (const char *file)
+bool remove (void *esp) {
+  char *file_name = (char*) *(int*)(esp);
+
+  if (!is_valid_pointer(file_name, 0))
+    exit(-1);
+
+  return filesys_remove(file_name);
+}
+
 // (const char *file)
 int open (void *esp) {
   if (!is_valid_pointer(esp, 4)) exit(-1);
@@ -268,6 +289,38 @@ int write (void *esp) {
     }
   }
 
+  return -1;
+}
+
+// void seek (int fd, unsigned position)
+void seek (void *esp) {
+  int fd = *(int*) (esp + 12);
+  unsigned position = *(unsigned*) (esp + 16);
+
+  // printf("sick %d %d\n", fd, position);
+  
+  struct list *fd_list = &thread_current()->fd_list;
+  struct list_elem *e;
+  for (e=list_begin(fd_list); e!=list_end(fd_list); e=list_next(e)) {
+    struct fd_file *ff = list_entry(e, struct fd_file, elem);
+    if (ff->fd == fd) {
+      file_seek (ff->file_ptr, position);
+    }
+  }
+}
+
+// unsigned tell (int fd)
+unsigned tell (void *esp) {
+  int fd = *(int*) esp;
+
+  struct list *fd_list = &thread_current()->fd_list;
+  struct list_elem *e;
+  for (e=list_begin(fd_list); e!=list_end(fd_list); e=list_next(e)) {
+    struct fd_file *ff = list_entry(e, struct fd_file, elem);
+    if (ff->fd == fd) {
+      return file_tell(ff->file_ptr);
+    }
+  }
   return -1;
 }
 
