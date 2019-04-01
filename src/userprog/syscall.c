@@ -136,7 +136,7 @@ int wait (void *esp) {
       }
       int result = process_wait(cstat->child_pid);
       list_remove(&cstat->elem);
-      free(&cstat);
+      free(cstat);
       return result;
     }
   }
