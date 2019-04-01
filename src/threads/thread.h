@@ -112,6 +112,7 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
+    char executable_name[128];
     char command_line[128];
     struct semaphore process_lock;
     struct list fd_list;
@@ -184,11 +185,13 @@ fp thread_load_avg_fp;
 
 /* Project 2 */
 struct semaphore* thread_get_process_lock(tid_t tid);
+bool thread_is_executables (char *file_name);
 
 struct fd_file {
   int fd;
   struct file *file_ptr;
   struct list_elem elem;
+  char file_name[128];
 };
 
 struct list thread_all;

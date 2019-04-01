@@ -595,6 +595,17 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return fp_to_int_nearest(fmul_int(thread_current()->recent_cpu_fp, 100));
 }
+
+bool thread_is_executables (char *file_name) {
+  struct list_elem *e;
+
+  for (e=list_begin(&thread_all); e!=list_end(&thread_all); e=list_next(e)) {
+    struct thread *t = list_entry(e, struct thread, elem_all);
+    if (strcmp(t->executable_name, file_name) == 0) return true;
+  }
+
+  return false;
+}
 
 /* Idle thread.  Executes when no other thread is ready to run.
 

@@ -81,6 +81,8 @@ start_process (void *f_name)
     }
   }
 
+  strlcpy(thread_current()->executable_name, file_name, strlen(file_name) + 1);
+
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) {

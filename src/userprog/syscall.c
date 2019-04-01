@@ -217,6 +217,7 @@ int open (void *esp) {
   struct fd_file *ff = malloc(sizeof(struct fd_file));
   ff->fd = old_max_fd + 1;
   ff->file_ptr = f;
+  strlcpy(ff->file_name, file_name, strlen(file_name) + 1);
   list_push_front(&thread_current()->fd_list, &ff->elem);
 
   // printf("file p=%p, fd=%d\n",f, ff->fd);
@@ -290,8 +291,11 @@ int write (void *esp) {
   for (e=list_begin(fd_list); e!=list_end(fd_list); e=list_next(e)) {
     struct fd_file *ff = list_entry(e, struct fd_file, elem);
     if (ff->fd == fd) {
-      file_write(ff->file_ptr, buffer, size);
-      return size;
+      if (thread_is_executables(ff->file_name)){
+        file_deny_write(ff->file_ptr);
+      } else file_allow_write(ff->file_ptr);
+      return file_write(ff->file_ptr, buffer, size);
+      // return size;
     }
   }
 
