@@ -16,6 +16,13 @@ enum thread_status
     THREAD_DYING        /* About to be destroyed. */
   };
 
+struct child_status {
+  int parent_pid;
+  int child_pid;
+  int exit_status;
+  struct semaphore sema_start;
+  struct list_elem elem;
+};
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
@@ -108,6 +115,18 @@ struct thread
     char command_line[128];
     struct semaphore process_lock;
     struct list fd_list;
+    struct list_elem elem_all;
+    /**
+     * 구현 방향에 대하여.
+     * 1. 따로 struct child_status를 둘 때.
+     * 1-1. 이걸 담을 list를 thread 내부에 child_list로 둘 경우 child가 죽었을 때 (thread_exit())
+     *      thread 객체를 free하지 않고 관리해야 되는데 (wait에서 쓰기 위해)
+     *      비효율적일 것 같아서 패스.
+     * 1-2. 이걸 global 변수. parent_child_list에 담아 사용하는 방식.
+     *      내 입장에선 가장 편해 보였음.
+     * 2. thread 내부에 exit_status, child_thread_list 등을 둬서 관리. 
+     *    1-1과 같은 이유로 패스.
+     */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -172,15 +191,8 @@ struct fd_file {
   struct list_elem elem;
 };
 
-
+struct list thread_all;
 struct list parent_child_list;
 
-struct child_status {
-  int parent_pid;
-  int child_pid;
-  int exit_status;
-  struct semaphore sema_start;
-  struct list_elem elem;
-};
 
 #endif /* threads/thread.h */

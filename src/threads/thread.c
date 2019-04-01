@@ -98,6 +98,7 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&sleep_list);
   list_init (&parent_child_list);
+  list_init (&thread_all);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -214,6 +215,8 @@ thread_create (const char *name, int priority,
   /* Stack frame for switch_threads(). */
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
+
+  list_push_back(&thread_all, &t->elem_all);
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -366,6 +369,7 @@ thread_exit (void)
      We will be destroyed during the call to schedule_tail(). */
   intr_disable ();
   sema_up(&thread_current()->process_lock);
+  list_remove(&thread_current()->elem_all);
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -398,18 +402,10 @@ struct semaphore*
 thread_get_process_lock(tid_t tid){
   struct list_elem *e;
 
-  for (e=list_begin(&ready_list); e!=list_end(&ready_list); e=list_next(e)) {
-    struct thread *t = list_entry(e, struct thread, elem);
+  for (e=list_begin(&thread_all); e!=list_end(&thread_all); e=list_next(e)) {
+    struct thread *t = list_entry(e, struct thread, elem_all);
     if (t->tid == tid) return &t->process_lock;
   }
-
-  for (e=list_begin(&sleep_list); e!=list_end(&sleep_list); e=list_next(e)) {
-    struct thread_sleep_info *info = list_entry(e, struct thread_sleep_info, elem);
-    if (info->t->tid == tid) return &info->t->process_lock;
-  }
-
-  if (thread_tid() == tid)
-    return &thread_current()->process_lock;
 
   // maybe the thread had been already finished;;
   return NULL;
