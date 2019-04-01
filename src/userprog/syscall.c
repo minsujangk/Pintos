@@ -18,6 +18,8 @@ static void syscall_handler (struct intr_frame *);
 bool is_valid_pointer (void *esp, int max_dist);
 bool create (void *esp);
 
+bool isdebug2 = false;
+
 void
 syscall_init (void) 
 {
@@ -107,15 +109,20 @@ tid_t exec (void *esp) {
   if(!is_valid_pointer(cmd_line, 0)) exit(-1);
 
   tid_t pid = process_execute(cmd_line);
+  if (isdebug2) printf("pid %d: %s, syscall::exec for %d\n", thread_tid(), cmd_line, pid);
   struct child_status *cstat = malloc(sizeof(struct child_status));
+  // struct child_status *cstat = thread_get_child_status(pid);
+  // struct child_status *cstat = palloc_get_page(0);
   cstat->parent_pid = thread_tid();
   cstat->child_pid = pid;
   cstat->exit_status = 1000;
   sema_init(&cstat->sema_start, 0);
   
   list_push_back(&parent_child_list, &cstat->elem);
-
+  if (isdebug2) printf("pid %d: exec waiting to start of %d\n", thread_tid(), pid);
   sema_down(&cstat->sema_start); // wait for start process complete
+  
+  if (isdebug2) printf("pid %d: start complete of %d\n", thread_tid(), pid);
   pid = cstat->child_pid;
   
   return pid;
@@ -123,6 +130,7 @@ tid_t exec (void *esp) {
 
 int wait (void *esp) {
   int pid = *(int*) esp;
+  if (isdebug2) printf("pid %d: syscall::wait for %d\n", thread_tid(), pid);
   struct list_elem *e, *next;
   for (e=list_begin(&parent_child_list); e!=list_end(&parent_child_list); e=next) {
     next=list_next(e);
