@@ -93,6 +93,11 @@ void exit (void* esp) {
     status = -1;
   else status = *(int*) esp;
 
+  exit_impl(status);
+}
+
+void exit_impl (int status) {
+
   _close_all_fd();
 
   struct list_elem *e, *next;
@@ -100,7 +105,8 @@ void exit (void* esp) {
     next=list_next(e);
     struct child_status *cstat = list_entry(e, struct child_status, elem);
     if (cstat->parent_pid == thread_tid()) {
-      list_remove(e);
+      list_remove(&cstat->elem);
+      free(cstat);
     }
     // update child status to later use in wait
     else if (cstat->child_pid == thread_tid()) {

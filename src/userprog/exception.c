@@ -4,12 +4,16 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "userprog/syscall.h"
+#include "userprog/pagedir.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+bool check_valid_pointer (void *ptr);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -151,11 +155,18 @@ page_fault (struct intr_frame *f)
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
+   if (!check_valid_pointer(fault_addr)) exit_impl(-1);
+}
+
+bool check_valid_pointer (void *ptr) {
+  bool success = true;
+  // check both boundaries
+  if (!is_user_vaddr(ptr))
+    return false;
+  
+  if (pagedir_get_page(thread_current()->pagedir, ptr) == NULL)
+    return false;
+
+  return success;
 }
 
