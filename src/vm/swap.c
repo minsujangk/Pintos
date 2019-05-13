@@ -2,7 +2,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 
-#define BLOCK_PER_PAGE PGSIZE / DISK_SECTOR_SIZE
+#define BLOCK_PER_PAGE (PGSIZE / DISK_SECTOR_SIZE)
 
 void swap_init(void)
 {
@@ -15,7 +15,7 @@ struct swap_entry *save_swap(void *upage)
 {
     struct swap_entry *entry_p = malloc(sizeof(struct swap_entry));
     lock_acquire(&swap_lock);
-    entry_p->swap_idx = 4 * bitmap_scan_and_flip(swap_bitmap, 0, 1, false);
+    entry_p->swap_idx = BLOCK_PER_PAGE * bitmap_scan_and_flip(swap_bitmap, 0, 1, false);
     lock_release(&swap_lock);
 
     for (int i = 0; i < BLOCK_PER_PAGE; i++)
@@ -32,7 +32,7 @@ void load_swap(void *kpage, struct swap_entry *entry_p)
         disk_read(swap_disk, entry_p->swap_idx + i, kpage + i * DISK_SECTOR_SIZE);
     }
     lock_acquire(&swap_lock);
-    bitmap_flip(swap_bitmap, entry_p->swap_idx / 4);
+    bitmap_flip(swap_bitmap, entry_p->swap_idx / BLOCK_PER_PAGE);
     lock_release(&swap_lock);
 
     free(entry_p);

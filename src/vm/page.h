@@ -1,4 +1,5 @@
 #include <list.h>
+#include "threads/thread.h"
 #include "filesys/file.h"
 
 enum spte_type
@@ -31,3 +32,4 @@ bool handle_page_fault(void *upage, void *esp);
 void load_spte_swap(struct spt_entry *entry_p);
 void load_spte_file(struct spt_entry *entry_p);
 void grow_stack(void *upage);
+void write_back(struct spt_entry *entry_p, bool is_dirty);

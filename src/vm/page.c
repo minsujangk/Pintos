@@ -1,4 +1,3 @@
-#include "page.h"
 #include "frame.h"
 #include "swap.h"
 #include <stdio.h>
@@ -78,7 +77,7 @@ struct spt_entry *fetch_spt_entry(void *upage)
 bool handle_page_fault(void *upage, void *esp)
 {
     uint8_t *addr = pg_round_down(upage);
-    // printf("handle pf %p\n", addr);
+    //printf("handle pf %p\n", addr);
     struct spt_entry *entry_p = fetch_spt_entry(addr);
 
     if (entry_p->type == IN_FILE)
@@ -103,7 +102,7 @@ bool handle_page_fault(void *upage, void *esp)
 void load_spte_swap(struct spt_entry *entry_p)
 {
     /* Get a page of memory. */
-    uint8_t *kpage = falloc(PAL_USER);
+    uint8_t *kpage = falloc(PAL_USER, entry_p);
 
     load_swap(kpage, entry_p->swap);
     entry_p->swap = NULL;
@@ -118,7 +117,7 @@ void load_spte_swap(struct spt_entry *entry_p)
 void load_spte_file(struct spt_entry *entry_p)
 {
     /* Get a page of memory. */
-    uint8_t *kpage = falloc(PAL_USER);
+    uint8_t *kpage = falloc(PAL_USER, entry_p);
 
     /* Load this page. */
     if (file_read_at(entry_p->file, kpage, entry_p->read_bytes, entry_p->offset) !=
@@ -130,7 +129,7 @@ void load_spte_file(struct spt_entry *entry_p)
     memset(kpage + entry_p->read_bytes, 0, entry_p->zero_bytes);
 
     /* Add the page to the process's address space. */
-    if (!install_page(entry_p->upage, kpage,true))
+    if (!install_page(entry_p->upage, kpage, true))
     {
         ffree(kpage);
         return;
@@ -148,10 +147,11 @@ install_page(void *upage, void *kpage, bool writable)
 
 void grow_stack(void *upage)
 {
-    uint8_t *kpage = falloc(PAL_USER | PAL_ZERO);
+    struct spt_entry *entry_p = malloc(sizeof(struct spt_entry));
+
+    uint8_t *kpage = falloc(PAL_USER | PAL_ZERO, entry_p);
     struct thread *t = thread_current();
 
-    struct spt_entry *entry_p = malloc(sizeof(struct spt_entry));
     entry_p->upage = upage;
     entry_p->type = STACK;
     entry_p->thread = t;
@@ -162,6 +162,24 @@ void grow_stack(void *upage)
 
     if (!install_page(upage, kpage, true))
     {
-        printf("stack fail\n");
+        //printf("stack fail\n");
     }
+}
+
+void write_back(struct spt_entry *entry_p, bool is_dirty)
+{
+    if (entry_p->type == IN_FILE && !is_dirty)
+    {
+    }
+    else if (entry_p->type == IN_MMAP)
+    {
+        //mmap
+    }
+    else
+    {
+        entry_p->type = IN_SWAP;
+        entry_p->swap = save_swap(entry_p->upage);
+        //printf("write back to swap %d\n", entry_p->swap->swap_idx);
+    }
+    pagedir_clear_page(entry_p->thread->pagedir, entry_p->upage);
 }
