@@ -706,6 +706,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->recent_cpu_fp = 0;
 
   list_init(&t->holding_locks);
+  list_init(&t->spage_table);
+  lock_init(&t->spt_lock);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

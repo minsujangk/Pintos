@@ -18,6 +18,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "vm/page.h"
+#include "vm/frame.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -349,9 +351,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment (file, file_page, (void *) mem_page,
-                                 read_bytes, zero_bytes, writable))
-                goto done;
+              // if (!load_segment (file, file_page, (void *) mem_page,
+              //                    read_bytes, zero_bytes, writable))
+              //   goto done;
+              add_spt_entry_file (file, file_page, (void *) mem_page,
+                                  read_bytes, zero_bytes, writable);
             }
           else
             goto done;
@@ -370,7 +374,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 
@@ -487,21 +490,13 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp, char **arg_tokens, int token_num, void **return_argv) 
 {
-  uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success) {
-        *esp = PHYS_BASE;
-        stack_save_arguments(esp, arg_tokens, token_num, return_argv);
-      }
-      else
-        palloc_free_page (kpage);
-    }
-  return success;
+  grow_stack(PHYS_BASE - PGSIZE);
+  *esp = PHYS_BASE;
+  stack_save_arguments(esp, arg_tokens, token_num, return_argv);
+      
+  return true;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

@@ -1,51 +1,95 @@
-#include "vm/frame.h"
+#include "frame.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
+#include <debug.h>
 
-bool isFrameTableInitiating = false;
+void _ffree(struct frame_entry *entry_p);
 
-void *acquireFrameEntry();
-
-void initFrameTable()
+void finit(void)
 {
-    lock_init(&acquireLock);
-    list_init(&frameTable);
+    list_init(&frame_table);
+    lock_init(&f_lock);
 }
 
-void *acquireFrameEntry()
+void *falloc(enum palloc_flags f)
 {
-    lock_acquire(&acquireLock);
-    isFrameTableInitiating = true;
-    // init here because first~
-    void *fe_p = malloc(sizeof(struct FrameEntry));
-    // if any putFrameEntry occurs here, omit it.
+    void *frame = palloc_get_page(f);
+    // printf("fallocing %p\n", frame);
 
-    isFrameTableInitiating = false;
-    lock_release(&acquireLock);
+    if (frame == NULL)
+    {
+        bool evictSuccess = evict();
+        if (!evictSuccess)
+            PANIC("eviction fail");
 
-    return fe_p;
+        // try again
+        frame = palloc_get_page(f);
+    }
+
+    struct frame_entry *entry_p = malloc(sizeof(struct frame_entry));
+    entry_p->frame = frame;
+    entry_p->t = thread_current();
+
+    lock_acquire(&f_lock);
+    list_push_back(&frame_table, &entry_p->elem);
+    lock_release(&f_lock);
+    // printf("fallocing complete\n");
+    return frame;
 }
 
-void putFrameEntry(void *pages, size_t page_cnt)
+struct frame_entry *ffetch(void *frame)
 {
-    if (isFrameTableInitiating)
-        return;
-    struct FrameEntry *entry_p = (struct FrameEntry *)acquireFrameEntry();
-    entry_p->pages = pages;
-    entry_p->pageCnt = page_cnt;
-    list_push_front(&frameTable, entry_p);
+    struct list_elem *e;
+    for (e = list_begin(&frame_table); e != list_end(&frame_table);
+         e = list_next(e))
+    {
+        struct frame_entry *entry_p = list_entry(e, struct frame_entry, elem);
+        if (entry_p->frame == frame)
+            return entry_p;
+    }
+    return NULL;
 }
 
-void deleteFrameEntry()
+bool evict(void)
 {
-    // 프로세스 등 죽을 때 사용.
 }
 
-void useFrameEntry(struct FrameEntry* fe_p)
+void ffree_thread(struct thread *t)
 {
-    // 꺼내서 맨 뒤에 넣기.
+    struct list_elem *e;
+    struct list_elem *e_next;
+    for (e = list_begin(&frame_table); e != list_end(&frame_table);)
+    {
+        struct frame_entry *entry_p = list_entry(e, struct frame_entry, elem);
+        e = list_next(e);
+        if (entry_p->t == t)
+        {
+            _ffree(entry_p);
+        }
+    }
 }
 
-void evictLRU() {
-    // LRU 기준 제일 뒤에 있는 거
+void ffree(void *frame)
+{
+    struct list_elem *e;
+    struct list_elem *e_next;
+    for (e = list_begin(&frame_table); e != list_end(&frame_table);)
+    {
+        struct frame_entry *entry_p = list_entry(e, struct frame_entry, elem);
+        e = list_next(e);
+        if (entry_p->frame == frame)
+        {
+            _ffree(entry_p);
+            return;
+        }
+    }
+}
+
+void _ffree(struct frame_entry *entry_p)
+{
+    lock_acquire(&f_lock);
+    list_remove(&entry_p->elem);
+    lock_release(&f_lock);
+    free(entry_p);
+    palloc_free_page(entry_p->frame);
 }

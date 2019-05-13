@@ -129,6 +129,9 @@ struct thread
      *    1-1과 같은 이유로 패스.
      */
 
+    struct list spage_table;
+    struct lock spt_lock; 
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

@@ -1,20 +1,24 @@
 #include <stddef.h>
 #include <list.h>
+#include "threads/palloc.h"
 
+struct list frame_table;
 
-struct list frameTable;
+struct lock *f_lock;
 
-struct FrameEntry
+struct frame_entry
 {
     struct list_elem elem;
-    void *pages;
-    size_t pageCnt;
+    struct thread *t;
+    void *frame;
+    int unused_cnt;
 };
 
-struct lock acquireLock;
+struct lock fe_Lock;
 
-void initFrameTable();
-void putFrameEntry(void *pages, size_t page_cnt);
-void deleteFrameEntry();
-void useFrameEntry();
-void evict();
+void finit(void);
+void *falloc(enum palloc_flags f);
+struct frame_entry *ffetch(void *frame);
+bool evict(void);
+void ffree_thread(struct thread *t);
+void ffree(void *frame);
