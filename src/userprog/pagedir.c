@@ -5,6 +5,7 @@
 #include "threads/init.h"
 #include "threads/pte.h"
 #include "threads/palloc.h"
+#include "vm/page.h"
 
 static uint32_t *active_pd (void);
 static void invalidate_pagedir (uint32_t *);
@@ -114,6 +115,7 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
     {
       ASSERT ((*pte & PTE_P) == 0);
       *pte = pte_create_user (kpage, writable);
+      addSupPageTableEntry(thread_tid(), upage, kpage);
       return true;
     }
   else
@@ -153,6 +155,10 @@ pagedir_clear_page (uint32_t *pd, void *upage)
   pte = lookup_page (pd, upage, false);
   if (pte != NULL && (*pte & PTE_P) != 0)
     {
+      // // save to swap or file or zero out
+      // // deleteFrameEntry(*pte & PTE_P); must be ran
+      // dropPage(pte_get_page(*pte));
+
       *pte &= ~PTE_P;
       invalidate_pagedir (pd);
     }

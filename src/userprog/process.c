@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "vm/page.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -82,12 +83,12 @@ start_process (void *f_name)
   }
 
   strlcpy(thread_current()->executable_name, file_name, strlen(file_name) + 1);
-
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) {
     thread_exit ();
   }
+  if (isdebug) printf("here?\n");
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -242,7 +243,7 @@ static bool setup_stack (void **esp, char **arg_tokens, int token_num, void **re
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
-                          bool writable);
+                          bool writable, char* file_name);
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
@@ -258,7 +259,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
-  // if (isdebug) printf("load filename: %s\n", file_name);
+  if (isdebug) printf("load filename: %s\n", file_name);
   char *token, *save_ptr;
   char *arg_tokens[128];
   int token_num = 0;
@@ -350,8 +351,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
               if (!load_segment (file, file_page, (void *) mem_page,
-                                 read_bytes, zero_bytes, writable))
+                                 read_bytes, zero_bytes, writable, file_name))
                 goto done;
+                                 
             }
           else
             goto done;
@@ -368,6 +370,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   success = true;
 
+  if (isdebug) printf("load success\n");
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
@@ -439,12 +442,13 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
    or disk read error occurs. */
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
-              uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
+              uint32_t read_bytes, uint32_t zero_bytes, bool writable, char *file_name) 
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
+  int pageCnt = 0;
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -453,11 +457,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
          and zero the final PAGE_ZERO_BYTES bytes. */
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
       /* Get a page of memory. */
       uint8_t *kpage = palloc_get_page (PAL_USER);
       if (kpage == NULL)
         return false;
+
+      printf("loaded %p\n", kpage);
 
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
@@ -474,11 +479,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
           return false; 
         }
 
+      setFileSupPageTableEntry(upage, ofs + pageCnt * PGSIZE, file_name);
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      pageCnt += 1;
     }
+
   return true;
 }
 

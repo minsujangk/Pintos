@@ -2,6 +2,7 @@
    values are as they should be. */
 
 #include <string.h>
+#include <stdio.h>
 #include "tests/arc4.h"
 #include "tests/lib.h"
 #include "tests/main.h"
@@ -13,6 +14,7 @@ static char buf[SIZE];
 void
 test_main (void)
 {
+  printf("hello\n\n");
   struct arc4 arc4;
   size_t i;
 

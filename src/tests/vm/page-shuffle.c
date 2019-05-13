@@ -14,6 +14,7 @@ static char buf[SIZE];
 void
 test_main (void)
 {
+  printf("%p", buf);
   size_t i;
 
   /* Initialize. */

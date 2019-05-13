@@ -14,6 +14,7 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#include "vm/page.h"
 
 
 /* Random value for struct thread's `magic' member.
@@ -107,6 +108,8 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 
   thread_load_avg_fp = 0;
+
+  initSupPageTable();
 
   // if (thread_mlfqs) {
   //   struct list temp_queue[64];
@@ -411,6 +414,21 @@ thread_get_process_lock(tid_t tid){
   return NULL;
 }
 
+
+struct list*
+thread_get_sup_pagetable(tid_t tid){
+  struct list_elem *e;
+
+  for (e=list_begin(&thread_all); e!=list_end(&thread_all); e=list_next(e)) {
+    struct thread *t = list_entry(e, struct thread, elem_all);
+    if (t->tid == tid) return &t->supPageTable;
+  }
+
+  // maybe the thread had been already finished;;
+  return NULL;
+}
+
+
 int
 thread_ready_max_priority () {
   return list_entry(list_front(&ready_list), struct thread, elem)->priority;
@@ -706,6 +724,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->recent_cpu_fp = 0;
 
   list_init(&t->holding_locks);
+  list_init(&t->supPageTable);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

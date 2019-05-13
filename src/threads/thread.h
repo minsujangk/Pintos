@@ -129,6 +129,8 @@ struct thread
      *    1-1과 같은 이유로 패스.
      */
 
+    struct list supPageTable;
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -197,5 +199,7 @@ struct fd_file {
 struct list thread_all;
 struct list parent_child_list;
 
+/* Project 3 */
+struct list* thread_get_sup_pagetable(tid_t tid);
 
 #endif /* threads/thread.h */
