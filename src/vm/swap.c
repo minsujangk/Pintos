@@ -13,15 +13,16 @@ void swap_init(void)
 
 struct swap_entry *save_swap(void *upage)
 {
+    // printf("saving swap %p\n", upage);
     struct swap_entry *entry_p = malloc(sizeof(struct swap_entry));
     lock_acquire(&swap_lock);
     entry_p->swap_idx = BLOCK_PER_PAGE * bitmap_scan_and_flip(swap_bitmap, 0, 1, false);
-    lock_release(&swap_lock);
 
     for (int i = 0; i < BLOCK_PER_PAGE; i++)
     {
         disk_write(swap_disk, entry_p->swap_idx + i, upage + i * DISK_SECTOR_SIZE);
     }
+    lock_release(&swap_lock);
     return entry_p;
 }
 

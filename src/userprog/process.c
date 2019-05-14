@@ -142,6 +142,8 @@ process_exit (void)
   struct thread *curr = thread_current ();
   uint32_t *pd;
 
+  remove_spt_entry(curr);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = curr->pagedir;
@@ -158,6 +160,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  
 }
 
 /* Sets up the CPU for running user code in the current

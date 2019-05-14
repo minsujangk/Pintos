@@ -13,6 +13,7 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "threads/malloc.h"
+#include "vm/page.h"
 
 static void syscall_handler (struct intr_frame *);
 bool is_valid_pointer (void *esp, int max_dist);
@@ -252,19 +253,36 @@ int read (void *esp) {
   // printf("reading %d, %p, %d\n", fd, buffer, size);
 
   // hex_dump(buffer, buffer, 32, 1);
-  if (!is_valid_pointer(buffer, size)) exit(-1);
+  // if (!is_valid_pointer(buffer, size)) {
+  //   printf("read exit here %p, %d\n", buffer, size);
+  //   exit(-1);}
 
+  struct file *file = NULL;
   struct list *fd_list = &thread_current()->fd_list;
   struct list_elem *e;
   for (e=list_begin(fd_list); e!=list_end(fd_list); e=list_next(e)) {
     struct fd_file *ff = list_entry(e, struct fd_file, elem);
     if (ff->fd == fd) {
-      file_read(ff->file_ptr, buffer, size);
-      return size;
+      file = ff->file_ptr;
+      break;
     }
   }
 
-  return -1;
+  if (file == NULL) return -1;
+  void *upage = pg_round_down(buffer);
+  for (int i = 0; i < size; i += PGSIZE)
+  {
+    struct spt_entry *entry_p = fetch_spt_entry(upage + i);
+    entry_p->pinning = true;
+    handle_page_fault(upage + i, NULL);
+  }
+  size = file_read(file, buffer, size);
+  for (int i = 0; i < size; i += PGSIZE)
+  {
+    struct spt_entry *entry_p = fetch_spt_entry(upage + i);
+    entry_p->pinning = false;
+  }
+  return size;
 }
 
 // (int fd, void *buffer, unsigned size)
@@ -279,27 +297,49 @@ int write (void *esp) {
   unsigned size = *(unsigned*) (esp + 8);
   // printf("write started %d, %p, %d\n", fd, buffer, size);
 
-  if (!is_valid_pointer(buffer, size)) exit(-1);
+  // if (!is_valid_pointer(buffer, size)) exit(-1);
 
   if (fd == 1) {
     putbuf(buffer, size);
     return size;
   }
   
+  struct file *file = NULL;
+  struct fd_file *ff_pick;
   struct list *fd_list = &thread_current()->fd_list;
   struct list_elem *e;
   for (e=list_begin(fd_list); e!=list_end(fd_list); e=list_next(e)) {
     struct fd_file *ff = list_entry(e, struct fd_file, elem);
     if (ff->fd == fd) {
-      if (thread_is_executables(ff->file_name)){
-        file_deny_write(ff->file_ptr);
-      } else file_allow_write(ff->file_ptr);
-      return file_write(ff->file_ptr, buffer, size);
-      // return size;
+      file = ff->file_ptr;
+      ff_pick = ff;
+      break;
     }
   }
 
-  return -1;
+
+  if (file == NULL) return -1;
+  void *upage = pg_round_down(buffer);
+  for (int i = 0; i < size; i += PGSIZE)
+  {
+    struct spt_entry *entry_p = fetch_spt_entry(upage + i);
+    entry_p->pinning = true;
+    handle_page_fault(upage + i, NULL);
+  }
+  if (thread_is_executables(ff_pick->file_name))
+  {
+    file_deny_write(ff_pick->file_ptr);
+  }
+  else
+    file_allow_write(ff_pick->file_ptr);
+  size = file_write(ff_pick->file_ptr, buffer, size);
+  for (int i = 0; i < size; i += PGSIZE)
+  {
+    struct spt_entry *entry_p = fetch_spt_entry(upage + i);
+    entry_p->pinning = false;
+  }
+
+  return size;
 }
 
 // void seek (int fd, unsigned position)

@@ -35,6 +35,7 @@ void add_spt_entry_file(struct file *file, off_t ofs, uint8_t *upage,
         entry_p->zero_bytes = page_zero_bytes;
         entry_p->thread = t;
         entry_p->type = IN_FILE;
+        entry_p->pinning = false;
 
         lock_acquire(&t->spt_lock);
         list_push_back(&t->spage_table, &entry_p->elem);
@@ -51,13 +52,16 @@ void add_spt_entry_file(struct file *file, off_t ofs, uint8_t *upage,
 
 void remove_spt_entry(struct thread *t)
 {
+    ffree_thread(t);
     struct list_elem *e;
     for (e = list_begin(&t->spage_table); e != list_end(&t->spage_table);)
     {
         struct spt_entry *entry_p = list_entry(e, struct spt_entry, elem);
         e = list_next(e);
-        if (entry_p->thread == t)
-            list_remove(&entry_p->elem);
+        // ffree(pagedir_get_page(t->pagedir, entry_p->upage));
+        pagedir_clear_page(t->pagedir, entry_p->upage);
+
+        free(entry_p);
     }
 }
 
@@ -77,28 +81,52 @@ struct spt_entry *fetch_spt_entry(void *upage)
 bool handle_page_fault(void *upage, void *esp)
 {
     uint8_t *addr = pg_round_down(upage);
-    //printf("handle pf %p\n", addr);
     struct spt_entry *entry_p = fetch_spt_entry(addr);
-
-    if (entry_p->type == IN_FILE)
+    // printf("handle pf %p, %p, %d\n", addr, esp, entry_p->type);
+    if (entry_p == NULL)
     {
+        grow_stack(addr);
+    }
+    else if (entry_p->type == IN_FILE)
+    {
+        entry_p->pinning = true;
         load_spte_file(entry_p);
+        entry_p->pinning = false;
     }
     else if (entry_p->type == IN_SWAP)
     {
+        entry_p->pinning = true;
         load_spte_swap(entry_p);
+        entry_p->pinning = false;
     }
     else if (entry_p->type == IN_MMAP)
     {
         //mmap
     }
-    else if (entry_p == NULL)
+    else
     {
-        grow_stack(addr - PGSIZE);
+        entry_p->pinning = true;
+        load_spte_zero(entry_p);
+        entry_p->pinning = false;
     }
 
     return true;
 }
+
+void load_spte_zero(struct spt_entry *entry_p)
+{
+    /* Get a page of memory. */
+    uint8_t *kpage = falloc(PAL_USER, entry_p);
+
+    memset(kpage, 0, PGSIZE);
+
+    if (!install_page(entry_p->upage, kpage, true))
+    {
+        ffree(kpage);
+        return;
+    }
+}
+
 void load_spte_swap(struct spt_entry *entry_p)
 {
     /* Get a page of memory. */
@@ -166,7 +194,7 @@ void grow_stack(void *upage)
     }
 }
 
-void write_back(struct spt_entry *entry_p, bool is_dirty)
+void write_back(struct spt_entry *entry_p, void *kpage, bool is_dirty)
 {
     if (entry_p->type == IN_FILE && !is_dirty)
     {
@@ -178,8 +206,8 @@ void write_back(struct spt_entry *entry_p, bool is_dirty)
     else
     {
         entry_p->type = IN_SWAP;
-        entry_p->swap = save_swap(entry_p->upage);
-        //printf("write back to swap %d\n", entry_p->swap->swap_idx);
+        entry_p->swap = save_swap(kpage);
+        // printf("write back to swap %d\n", entry_p->swap->swap_idx);
     }
     pagedir_clear_page(entry_p->thread->pagedir, entry_p->upage);
 }

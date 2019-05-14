@@ -4,6 +4,7 @@
 
 enum spte_type
 {
+    NONE,
     IN_FILE,
     IN_SWAP,
     IN_MMAP,
@@ -22,6 +23,7 @@ struct spt_entry
     uint32_t zero_bytes;
 
     struct swap_entry *swap;
+    bool pinning;
 };
 
 void add_spt_entry_file(struct file *file, off_t ofs, uint8_t *upage,
@@ -29,7 +31,8 @@ void add_spt_entry_file(struct file *file, off_t ofs, uint8_t *upage,
 void remove_spt_entry(struct thread *t);
 struct spt_entry *fetch_spt_entry(void *upage);
 bool handle_page_fault(void *upage, void *esp);
+void load_spte_zero(struct spt_entry *entry_p);
 void load_spte_swap(struct spt_entry *entry_p);
 void load_spte_file(struct spt_entry *entry_p);
 void grow_stack(void *upage);
-void write_back(struct spt_entry *entry_p, bool is_dirty);
+void write_back(struct spt_entry *entry_p, void *kpage, bool is_dirty);

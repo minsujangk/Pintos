@@ -5,7 +5,8 @@
 
 struct list frame_table;
 
-struct lock *f_lock;
+struct lock f_lock;
+struct lock evict_lock;
 
 struct frame_entry
 {

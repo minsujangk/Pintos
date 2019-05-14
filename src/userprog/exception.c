@@ -163,7 +163,10 @@ page_fault(struct intr_frame *f)
    if (not_present & is_user_vaddr(fault_addr))
       handle_page_fault(fault_addr, f->esp);
 
-   if (!check_valid_pointer(fault_addr)) exit_impl(-1);
+   if (!check_valid_pointer(fault_addr))
+   {
+      exit_impl(-1);
+   }
 }
 
 bool check_valid_pointer(void *ptr)
