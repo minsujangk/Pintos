@@ -132,6 +132,7 @@ struct thread
     struct list spage_table;
     struct lock spt_lock; 
     struct file *exe_file;
+    struct list mm_list;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -196,6 +197,13 @@ struct fd_file {
   struct file *file_ptr;
   struct list_elem elem;
   char file_name[128];
+};
+
+struct mm_item {
+  int mapid;
+  struct file *file_ptr;
+  char file_name[128];  
+  struct list_elem elem;
 };
 
 struct list thread_all;

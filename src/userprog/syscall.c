@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <round.h>
 #include <syscall-nr.h>
 #include "threads/init.h"
 #include "threads/interrupt.h"
@@ -81,8 +82,13 @@ syscall_handler (struct intr_frame *f)
     case SYS_CLOSE:
       close(arg_addr);
     break;
-    
-  }
+    case SYS_MMAP:
+      f->eax = mmap(arg_addr);
+      break;
+    case SYS_MUNMAP:
+      munmap(arg_addr);
+      break;
+    }
 }
 
 void halt () {
@@ -99,10 +105,23 @@ void exit (void* esp) {
 }
 
 void exit_impl (int status) {
+  struct list_elem *e, *next;
+
+  struct list *mm_list = &thread_current()->mm_list;
+  // lock_acquire(&fs_lock);
+  for (e = list_begin(mm_list); e != list_end(mm_list);)
+  {
+    struct mm_item *ff = list_entry(e, struct mm_item, elem);
+     e = list_next(e);
+
+    remove_mmap_spt_entry(ff->mapid);
+    list_remove(&ff->elem);
+    // munmap(ff->mapid);
+  }
+  // lock_release(&fs_lock);
 
   _close_all_fd();
 
-  struct list_elem *e, *next;
   for (e=list_begin(&parent_child_list); e!=list_end(&parent_child_list); e=next) {
     next=list_next(e);
     struct child_status *cstat = list_entry(e, struct child_status, elem);
@@ -115,7 +134,6 @@ void exit_impl (int status) {
       cstat->exit_status = status;
     }
   }
-
   char *name;
   char *process_name = strtok_r(thread_current()->command_line, " ", &name);
   printf ("%s: exit(%d)\n", process_name, status);
@@ -275,9 +293,9 @@ int read (void *esp) {
   // printf("reading %d, %p, %d\n", fd, buffer, size);
 
   // hex_dump(buffer, buffer, 32, 1);
-  // if (!is_valid_pointer(buffer, size)) {
-  //   printf("read exit here %p, %d\n", buffer, size);
-  //   exit(-1);}
+  if (buffer > PHYS_BASE) {
+    // printf("read exit here %p, %d\n", buffer, size);
+    exit(-1);}
 
   lock_acquire(&fs_lock);
   struct file *file = NULL;
@@ -300,14 +318,14 @@ int read (void *esp) {
   for (int i = 0; i < size; i += PGSIZE)
   {
     struct spt_entry *entry_p = fetch_spt_entry(upage + i);
-    entry_p->pinning = true;
-    handle_page_fault(upage + i, NULL);
+    // entry_p->pinning = true;
+    handle_page_fault(upage + i, esp);
   }
   size = file_read(file, buffer, size);
   for (int i = 0; i < size; i += PGSIZE)
   {
     struct spt_entry *entry_p = fetch_spt_entry(upage + i);
-    entry_p->pinning = false;
+    // entry_p->pinning = false;
   }
   lock_release(&fs_lock);
   return size;
@@ -325,7 +343,7 @@ int write (void *esp) {
   unsigned size = *(unsigned*) (esp + 8);
   // printf("write started %d, %p, %d\n", fd, buffer, size);
 
-  // if (!is_valid_pointer(buffer, size)) exit(-1);
+  if (!is_valid_pointer(buffer, size)) exit(-1);
 
   if (fd == 1) {
     putbuf(buffer, size);
@@ -353,7 +371,7 @@ int write (void *esp) {
   {
     struct spt_entry *entry_p = fetch_spt_entry(upage + i);
     entry_p->pinning = true;
-    handle_page_fault(upage + i, NULL);
+    handle_page_fault(upage + i, esp);
   }
   if (thread_is_executables(ff_pick->file_name))
   {
@@ -419,15 +437,104 @@ void close (void *esp) {
   for (e=list_begin(fd_list); e!=list_end(fd_list); e=next) {
     struct fd_file *ff = list_entry(e, struct fd_file, elem);
     next = list_next(e);
-    if (ff->fd == fd) {
+    if (ff->fd == fd)
+    {
       // printf("closing %d, %p\n\n", fd, ff->file_ptr);
-      file_close(ff->file_ptr);
+      bool is_using = false;
+      struct list *mm_list = &thread_current()->mm_list;
+      struct list_elem *e;
+      for (e = list_begin(mm_list); e != list_end(mm_list); e = list_next(e))
+      {
+        struct mm_item *mm = list_entry(e, struct mm_item, elem);
+
+        if (mm->file_ptr == ff->file_ptr)
+        {
+          is_using = true;
+        }
+      }
+
+      if (!is_using)
+        file_close(ff->file_ptr);
       list_remove(&ff->elem);
       free(ff);
       break;
     }
   }
   lock_release(&fs_lock);
+}
+
+// mapid_t mmap (int fd, void *addr)
+int mmap (void *esp) {
+  int fd = *(int*) (esp + 12);
+  void* addr = *(void**) (esp + 16);
+
+  // printf("mmap %d %d\n", fd, addr);
+  
+  struct file *file = NULL;
+  lock_acquire(&fs_lock);
+  struct list *fd_list = &thread_current()->fd_list;
+  struct list_elem *e;
+  for (e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
+  {
+    struct fd_file *ff = list_entry(e, struct fd_file, elem);
+    if (ff->fd == fd)
+    {
+      file = ff->file_ptr;
+    }
+  }
+
+  if (addr == NULL || file == NULL || pg_ofs(addr) != 0)
+  {
+    lock_release(&fs_lock);
+    return -1;
+  }
+
+  int old_max_mapid;
+  if (list_empty(&thread_current()->mm_list))
+    old_max_mapid = 1;
+  else
+    old_max_mapid = list_entry(list_front(&thread_current()->mm_list), struct mm_item, elem)->mapid;
+
+  struct mm_item *mm = malloc(sizeof(struct mm_item));
+  mm->mapid = old_max_mapid + 1;
+  mm->file_ptr = file;
+  int read_bytes = file_length(file);
+  int zero_bytes = ROUND_UP(read_bytes, PGSIZE) - read_bytes;
+  if (add_spt_entry_mmap(file, 0, addr, read_bytes, zero_bytes, true, mm->mapid))
+    list_push_back(&thread_current()->mm_list, &mm->elem);
+  else
+  {
+    lock_release(&fs_lock);
+    return -1;
+  }
+
+  lock_release(&fs_lock);
+
+  return mm->mapid;
+}
+
+
+// void munmap (mapid_t mapping)
+void munmap (void *esp) {
+  if (!is_valid_pointer(esp, 4)) exit(-1);
+
+  int mapid = *(int*)esp;
+  remove_mmap_spt_entry(mapid);
+  struct list *mm_list = &thread_current()->mm_list;
+  struct list_elem *e;
+  for (e = list_begin(mm_list); e != list_end(mm_list); e = list_next(e))
+  {
+    struct mm_item *ff = list_entry(e, struct mm_item, elem);
+
+    if (ff->mapid == mapid)
+    {
+      list_remove(e);
+      break;
+    }
+  }
+
+  // printf("munmap mapid=%p\n",mapid);
+  return;
 }
 
 void _close_all_fd (void) {

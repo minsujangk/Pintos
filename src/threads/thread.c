@@ -701,6 +701,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   sema_init(&t->process_lock, 0);
   list_init(&t->fd_list);
+  list_init(&t->mm_list);
+
 
   t->nice = 0;
   t->recent_cpu_fp = 0;

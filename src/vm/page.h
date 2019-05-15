@@ -17,6 +17,7 @@ struct spt_entry
     enum spte_type type;
     struct thread *thread;
     struct file *file;
+    int mapid;
     void *upage;
     off_t offset;
     uint32_t read_bytes;
@@ -28,7 +29,11 @@ struct spt_entry
 
 void add_spt_entry_file(struct file *file, off_t ofs, uint8_t *upage,
                         uint32_t read_bytes, uint32_t zero_bytes, bool writable);
+bool add_spt_entry_mmap(struct file *file, off_t ofs, uint8_t *upage,
+                        uint32_t read_bytes, uint32_t zero_bytes, bool writable,
+                        int mapid);
 void remove_spt_entry(struct thread *t);
+void remove_mmap_spt_entry(int mapid);
 struct spt_entry *fetch_spt_entry(void *upage);
 bool handle_page_fault(void *upage, void *esp);
 void load_spte_zero(struct spt_entry *entry_p);

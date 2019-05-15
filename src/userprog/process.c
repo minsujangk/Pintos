@@ -290,7 +290,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file = filesys_open (file_name);
   if (file == NULL) 
     {
-    printf("여긴가!!!!!!!!!!!!!!!!!!!!!\n");
       if (isdebug) printf ("load: %s: open failed\n", file_name);
       goto done; 
     }

@@ -51,6 +51,79 @@ void add_spt_entry_file(struct file *file, off_t ofs, uint8_t *upage,
     return true;
 }
 
+bool add_spt_entry_mmap(struct file *file, off_t ofs, uint8_t *upage,
+                        uint32_t read_bytes, uint32_t zero_bytes, bool writable,
+                        int mapid)
+{
+    ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+    ASSERT(pg_ofs(upage) == 0);
+    ASSERT(ofs % PGSIZE == 0);
+
+    // file_seek(file, ofs);
+    while (read_bytes > 0 || zero_bytes > 0)
+    {
+        /* Do calculate how to fill this page.
+         We will read PAGE_READ_BYTES bytes from FILE
+         and zero the final PAGE_ZERO_BYTES bytes. */
+        size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+        size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+        struct thread *t = thread_current();
+
+        // mmap-overlap
+        struct spt_entry *old_entry = fetch_spt_entry(upage);
+        if (old_entry != NULL)
+        {
+            remove_mmap_spt_entry(mapid);
+            return false;
+        }
+
+        struct spt_entry *entry_p = malloc(sizeof(struct spt_entry));
+        entry_p->file = file;
+        entry_p->offset = ofs;
+        entry_p->upage = upage;
+        entry_p->read_bytes = page_read_bytes;
+        entry_p->zero_bytes = page_zero_bytes;
+        entry_p->thread = t;
+        entry_p->type = IN_MMAP;
+        entry_p->pinning = false;
+        entry_p->mapid = mapid;
+
+        lock_acquire(&t->spt_lock);
+        list_push_back(&t->spage_table, &entry_p->elem);
+        lock_release(&t->spt_lock);
+
+        /* Advance. */
+        read_bytes -= page_read_bytes;
+        zero_bytes -= page_zero_bytes;
+        upage += PGSIZE;
+        ofs += PGSIZE;
+    }
+    return true;
+}
+
+void remove_mmap_spt_entry(int mapid)
+{
+    struct thread *t = thread_current();
+    struct list_elem *e;
+    for (e = list_begin(&t->spage_table); e != list_end(&t->spage_table);)
+    {
+        struct spt_entry *entry_p = list_entry(e, struct spt_entry, elem);
+        e = list_next(e);
+        if (entry_p->type == IN_MMAP && entry_p->mapid == mapid)
+        {
+            if (pagedir_is_dirty(t->pagedir, entry_p->upage))
+                write_back(entry_p, NULL, true);
+            else
+                pagedir_clear_page(t->pagedir, entry_p->upage);
+            ffree(pagedir_get_page(t->pagedir, entry_p->upage));
+            list_remove(&entry_p->elem);
+
+            free(entry_p);
+        }
+    }
+}
+
 void remove_spt_entry(struct thread *t)
 {
     ffree_thread(t);
@@ -81,31 +154,42 @@ struct spt_entry *fetch_spt_entry(void *upage)
 
 bool handle_page_fault(void *upage, void *esp)
 {
-    uint8_t *addr = pg_round_down(upage);
+    void *addr = pg_round_down(upage);
     struct spt_entry *entry_p = fetch_spt_entry(addr);
-    // printf("handle pf %p, %p, %d\n", addr, esp, entry_p->type);
+    // printf("handle pf %p, %p, %d, %p\n", addr, esp, addr > esp-PGSIZE, entry_p);
     if (entry_p == NULL)
     {
-        grow_stack(addr);
+        // printf("handle pf1\n");
+        if (addr > esp -  PGSIZE)
+            grow_stack(addr);
+        else
+            return false;
     }
     else if (entry_p->type == IN_FILE)
     {
+        // printf("handle pf2\n");
         entry_p->pinning = true;
         load_spte_file(entry_p);
         entry_p->pinning = false;
     }
     else if (entry_p->type == IN_SWAP)
     {
+        // printf("handle pf3\n");
         entry_p->pinning = true;
         load_spte_swap(entry_p);
         entry_p->pinning = false;
     }
     else if (entry_p->type == IN_MMAP)
     {
+        // printf("handle pf4\n");
         //mmap
+        entry_p->pinning = true;
+        load_spte_file(entry_p);
+        entry_p->pinning = false;
     }
-    else
+    else if (entry_p != NULL)
     {
+        // printf("handle pf5\n");
         entry_p->pinning = true;
         load_spte_zero(entry_p);
         entry_p->pinning = false;
@@ -180,6 +264,7 @@ install_page(void *upage, void *kpage, bool writable)
 
 void grow_stack(void *upage)
 {
+    // printf("grow stack %p\n", upage);
     struct spt_entry *entry_p = malloc(sizeof(struct spt_entry));
 
     uint8_t *kpage = falloc(PAL_USER | PAL_ZERO, entry_p);
@@ -207,12 +292,14 @@ void write_back(struct spt_entry *entry_p, void *kpage, bool is_dirty)
     else if (entry_p->type == IN_MMAP)
     {
         //mmap
+        file_write_at(entry_p->file, entry_p->upage,
+                      PGSIZE, entry_p->offset);
     }
     else
     {
         entry_p->type = IN_SWAP;
         entry_p->swap = save_swap(kpage);
-        // printf("write back to swap %d\n", entry_p->swap->swap_idx);
+        // printf("write back to swap %p: %d\n", entry_p->upage, entry_p->swap->swap_idx);
     }
     pagedir_clear_page(entry_p->thread->pagedir, entry_p->upage);
 }
