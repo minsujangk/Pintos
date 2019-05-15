@@ -26,6 +26,7 @@ bool isdebug2 = false;
 void
 syscall_init (void) 
 {
+  lock_init(&fs_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -126,8 +127,10 @@ tid_t exec (void *esp) {
 
   if(!is_valid_pointer(cmd_line, 0)) exit(-1);
 
+  lock_acquire(&fs_lock);
   tid_t pid = process_execute(cmd_line);
-  if (isdebug2) printf("pid %d: %s, syscall::exec for %d\n", thread_tid(), cmd_line, pid);
+  lock_release(&fs_lock);
+  // printf("pid %d: %s, syscall::exec for %d\n", thread_tid(), cmd_line, pid);
   struct child_status *cstat = malloc(sizeof(struct child_status));
   // struct child_status *cstat = thread_get_child_status(pid);
   // struct child_status *cstat = palloc_get_page(0);
@@ -137,12 +140,13 @@ tid_t exec (void *esp) {
   sema_init(&cstat->sema_start, 0);
   
   list_push_back(&parent_child_list, &cstat->elem);
-  if (isdebug2) printf("pid %d: exec waiting to start of %d\n", thread_tid(), pid);
+// printf("pid %d: exec %s waiting to start of %d\n", thread_tid(),  cmd_line, pid);
   sema_down(&cstat->sema_start); // wait for start process complete
   
-  if (isdebug2) printf("pid %d: start complete of %d\n", thread_tid(), pid);
+// printf("pid %d: start complete of %d\n", thread_tid(), pid);
   pid = cstat->child_pid;
   
+// printf("pid %d: cstat of %d\n", thread_tid(), pid);
   return pid;
 }
 
@@ -182,9 +186,12 @@ create (void *esp) {
 
   if (!is_valid_pointer(file_name, 0))
     exit(-1);
-  // printf;("create is: %s\n", file_name);
 
-  return filesys_create(file_name, initial_size);
+  lock_acquire(&fs_lock);
+  bool returnVal = filesys_create(file_name, initial_size);
+  lock_release(&fs_lock);
+  // printf("create is: %s, %d, %d\n", file_name, initial_size, returnVal);
+  return returnVal;
 }
 
 // bool remove (const char *file)
@@ -194,7 +201,10 @@ bool remove (void *esp) {
   if (!is_valid_pointer(file_name, 0))
     exit(-1);
 
-  return filesys_remove(file_name);
+  lock_acquire(&fs_lock);
+  bool returnVal = filesys_remove(file_name);
+  lock_release(&fs_lock);
+  return returnVal;
 }
 
 // (const char *file)
@@ -205,9 +215,14 @@ int open (void *esp) {
   if (!is_valid_pointer(file_name, 0))
     exit(-1);
 
+  lock_acquire(&fs_lock);
   struct file *f = filesys_open(file_name);
-  if (f==NULL) return -1;
-  
+  if (f == NULL)
+  {
+    lock_release(&fs_lock);
+    return -1;
+  }
+
   int old_max_fd;
   if (list_empty(&thread_current()->fd_list))
     old_max_fd = 2;
@@ -220,6 +235,7 @@ int open (void *esp) {
   ff->file_ptr = f;
   strlcpy(ff->file_name, file_name, strlen(file_name) + 1);
   list_push_front(&thread_current()->fd_list, &ff->elem);
+  lock_release(&fs_lock);
 
   // printf("file p=%p, fd=%d\n",f, ff->fd);
   return ff->fd;
@@ -230,12 +246,18 @@ int filesize (void *esp) {
 
   struct list *fd_list = &thread_current()->fd_list;
   struct list_elem *e;
-  for (e=list_begin(fd_list); e!=list_end(fd_list); e=list_next(e)) {
+  lock_acquire(&fs_lock);
+  for (e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
+  {
     struct fd_file *ff = list_entry(e, struct fd_file, elem);
-    if (ff->fd == fd) {
-      return file_length(ff->file_ptr);
+    if (ff->fd == fd)
+    {
+      int returnVal = file_length(ff->file_ptr);
+      lock_release(&fs_lock);
+      return returnVal;
     }
   }
+  lock_release(&fs_lock);
   return -1;
 }
 
@@ -257,6 +279,7 @@ int read (void *esp) {
   //   printf("read exit here %p, %d\n", buffer, size);
   //   exit(-1);}
 
+  lock_acquire(&fs_lock);
   struct file *file = NULL;
   struct list *fd_list = &thread_current()->fd_list;
   struct list_elem *e;
@@ -268,7 +291,11 @@ int read (void *esp) {
     }
   }
 
-  if (file == NULL) return -1;
+  if (file == NULL)
+  {
+    lock_release(&fs_lock);
+    return -1;
+  }
   void *upage = pg_round_down(buffer);
   for (int i = 0; i < size; i += PGSIZE)
   {
@@ -282,6 +309,7 @@ int read (void *esp) {
     struct spt_entry *entry_p = fetch_spt_entry(upage + i);
     entry_p->pinning = false;
   }
+  lock_release(&fs_lock);
   return size;
 }
 
@@ -304,6 +332,7 @@ int write (void *esp) {
     return size;
   }
   
+  lock_acquire(&fs_lock);
   struct file *file = NULL;
   struct fd_file *ff_pick;
   struct list *fd_list = &thread_current()->fd_list;
@@ -339,6 +368,7 @@ int write (void *esp) {
     entry_p->pinning = false;
   }
 
+  lock_release(&fs_lock);
   return size;
 }
 
@@ -349,28 +379,34 @@ void seek (void *esp) {
 
   // printf("sick %d %d\n", fd, position);
   
+  lock_acquire(&fs_lock);
   struct list *fd_list = &thread_current()->fd_list;
   struct list_elem *e;
   for (e=list_begin(fd_list); e!=list_end(fd_list); e=list_next(e)) {
     struct fd_file *ff = list_entry(e, struct fd_file, elem);
     if (ff->fd == fd) {
       file_seek (ff->file_ptr, position);
+      break;
     }
   }
+  lock_release(&fs_lock);
 }
 
 // unsigned tell (int fd)
 unsigned tell (void *esp) {
   int fd = *(int*) esp;
 
+  lock_acquire(&fs_lock);
   struct list *fd_list = &thread_current()->fd_list;
   struct list_elem *e;
   for (e=list_begin(fd_list); e!=list_end(fd_list); e=list_next(e)) {
     struct fd_file *ff = list_entry(e, struct fd_file, elem);
     if (ff->fd == fd) {
+      lock_release(&fs_lock);
       return file_tell(ff->file_ptr);
     }
   }
+  lock_release(&fs_lock);
   return -1;
 }
 
@@ -379,20 +415,25 @@ void close (void *esp) {
 
   struct list *fd_list = &thread_current()->fd_list;
   struct list_elem *e, *next;
+  lock_acquire(&fs_lock);
   for (e=list_begin(fd_list); e!=list_end(fd_list); e=next) {
     struct fd_file *ff = list_entry(e, struct fd_file, elem);
     next = list_next(e);
     if (ff->fd == fd) {
+      // printf("closing %d, %p\n\n", fd, ff->file_ptr);
       file_close(ff->file_ptr);
       list_remove(&ff->elem);
       free(ff);
+      break;
     }
   }
+  lock_release(&fs_lock);
 }
 
 void _close_all_fd (void) {
   struct list *fd_list = &thread_current()->fd_list;
   struct list_elem *e, *next;
+  lock_acquire(&fs_lock);
   for (e=list_begin(fd_list); e!=list_end(fd_list); e=next) {
     struct fd_file *ff = list_entry(e, struct fd_file, elem);
     next = list_next(e);
@@ -400,6 +441,7 @@ void _close_all_fd (void) {
     list_remove(&ff->elem);
     free(ff);
   }
+  lock_release(&fs_lock);
 }
 
 bool is_valid_pointer (void *esp, int max_length) {

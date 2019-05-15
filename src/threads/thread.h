@@ -131,6 +131,7 @@ struct thread
 
     struct list spage_table;
     struct lock spt_lock; 
+    struct file *exe_file;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

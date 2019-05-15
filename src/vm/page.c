@@ -2,6 +2,7 @@
 #include "swap.h"
 #include <stdio.h>
 #include "userprog/pagedir.h"
+#include "userprog/syscall.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
@@ -147,13 +148,17 @@ void load_spte_file(struct spt_entry *entry_p)
     /* Get a page of memory. */
     uint8_t *kpage = falloc(PAL_USER, entry_p);
 
+    // lock_acquire(&fs_lock);
     /* Load this page. */
     if (file_read_at(entry_p->file, kpage, entry_p->read_bytes, entry_p->offset) !=
         (int)entry_p->read_bytes)
     {
+        // lock_release(&fs_lock);
         ffree(kpage);
         return;
     }
+
+    // lock_release(&fs_lock);
     memset(kpage + entry_p->read_bytes, 0, entry_p->zero_bytes);
 
     /* Add the page to the process's address space. */

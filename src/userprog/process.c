@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -67,7 +68,7 @@ start_process (void *f_name)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  if (isdebug) printf("pid %d: start_process %s\n", thread_tid(), file_name);
+  // printf("pid %d: start_process %s %d\n", thread_tid(), file_name, success);
 
   struct list_elem *e;
   for (e=list_begin(&parent_child_list); e!=list_end(&parent_child_list); e=list_next(e)) {
@@ -143,6 +144,7 @@ process_exit (void)
   uint32_t *pd;
 
   remove_spt_entry(curr);
+  file_close(curr->exe_file);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -283,10 +285,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
   }
   process_activate ();
 
+  lock_acquire(&fs_lock);
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
     {
+    printf("여긴가!!!!!!!!!!!!!!!!!!!!!\n");
       if (isdebug) printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
@@ -372,9 +376,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
+  thread_current()->exe_file = file;
   success = true;
 
  done:
+  lock_release(&fs_lock);
   /* We arrive here whether the load is successful or not. */
   return success;
 }
