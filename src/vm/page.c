@@ -37,6 +37,9 @@ void add_spt_entry_file(struct file *file, off_t ofs, uint8_t *upage,
         entry_p->thread = t;
         entry_p->type = IN_FILE;
         entry_p->pinning = false;
+        entry_p->writeable = writable;
+
+        // printf("add entry %p: %d\n", upage, writable);
 
         lock_acquire(&t->spt_lock);
         list_push_back(&t->spage_table, &entry_p->elem);
@@ -88,6 +91,7 @@ bool add_spt_entry_mmap(struct file *file, off_t ofs, uint8_t *upage,
         entry_p->type = IN_MMAP;
         entry_p->pinning = false;
         entry_p->mapid = mapid;
+        entry_p->writeable = writable;
 
         lock_acquire(&t->spt_lock);
         list_push_back(&t->spage_table, &entry_p->elem);
@@ -246,7 +250,7 @@ void load_spte_file(struct spt_entry *entry_p)
     memset(kpage + entry_p->read_bytes, 0, entry_p->zero_bytes);
 
     /* Add the page to the process's address space. */
-    if (!install_page(entry_p->upage, kpage, true))
+    if (!install_page(entry_p->upage, kpage, entry_p->writeable))
     {
         ffree(kpage);
         return;
@@ -273,6 +277,7 @@ void grow_stack(void *upage)
     entry_p->upage = upage;
     entry_p->type = STACK;
     entry_p->thread = t;
+    entry_p->writeable = true;
 
     lock_acquire(&t->spt_lock);
     list_push_back(&t->spage_table, &entry_p->elem);

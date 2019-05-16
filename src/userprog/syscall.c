@@ -293,9 +293,11 @@ int read (void *esp) {
   // printf("reading %d, %p, %d\n", fd, buffer, size);
 
   // hex_dump(buffer, buffer, 32, 1);
-  if (buffer > PHYS_BASE) {
+  if (buffer > PHYS_BASE)
+  {
     // printf("read exit here %p, %d\n", buffer, size);
-    exit(-1);}
+    exit(-1);
+  }
 
   lock_acquire(&fs_lock);
   struct file *file = NULL;
@@ -319,7 +321,15 @@ int read (void *esp) {
   {
     struct spt_entry *entry_p = fetch_spt_entry(upage + i);
     // entry_p->pinning = true;
-    handle_page_fault(upage + i, esp);
+    // printf("fetch %p %d\n", entry_p->upage, entry_p->writeable);
+    
+    // stack memory일 경우, grow stack 체크를 위해 페이지 폴트 한 번 시켜봄.
+    if ((entry_p == NULL && !handle_page_fault(upage + i, esp)) ||
+        (entry_p != NULL && !entry_p->writeable))
+    {
+      lock_release(&fs_lock);
+      exit_impl(-1);
+    }
   }
   size = file_read(file, buffer, size);
   for (int i = 0; i < size; i += PGSIZE)
@@ -343,7 +353,11 @@ int write (void *esp) {
   unsigned size = *(unsigned*) (esp + 8);
   // printf("write started %d, %p, %d\n", fd, buffer, size);
 
-  if (!is_valid_pointer(buffer, size)) exit(-1);
+  if (buffer > PHYS_BASE)
+  {
+    // printf("read exit here %p, %d\n", buffer, size);
+    exit(-1);
+  }
 
   if (fd == 1) {
     putbuf(buffer, size);
@@ -363,6 +377,11 @@ int write (void *esp) {
       break;
     }
   }
+  
+  if (file == NULL || ff_pick == NULL) {
+    lock_release(&fs_lock);
+    exit_impl(-1);
+  }
 
 
   if (file == NULL) return -1;
@@ -370,6 +389,11 @@ int write (void *esp) {
   for (int i = 0; i < size; i += PGSIZE)
   {
     struct spt_entry *entry_p = fetch_spt_entry(upage + i);
+    if (entry_p == NULL)
+    {
+      lock_release(&fs_lock);
+      exit_impl(-1);
+    }
     entry_p->pinning = true;
     handle_page_fault(upage + i, esp);
   }

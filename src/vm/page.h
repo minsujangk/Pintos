@@ -22,6 +22,7 @@ struct spt_entry
     off_t offset;
     uint32_t read_bytes;
     uint32_t zero_bytes;
+    bool writeable;
 
     struct swap_entry *swap;
     bool pinning;
