@@ -42,6 +42,7 @@ syscall_handler (struct intr_frame *f)
   int syscall_num =  *(int*) f->esp;
   void *arg_addr = f->esp + 4;
   // printf ("system call! %d\n", syscall_num);
+  thread_current()->sys_esp = f->esp;
 
   switch(syscall_num) {
     case SYS_HALT:
@@ -320,7 +321,7 @@ int read (void *esp) {
   for (int i = 0; i < size; i += PGSIZE)
   {
     struct spt_entry *entry_p = fetch_spt_entry(upage + i);
-    // entry_p->pinning = true;
+  
     // printf("fetch %p %d\n", entry_p->upage, entry_p->writeable);
     
     // stack memory일 경우, grow stack 체크를 위해 페이지 폴트 한 번 시켜봄.
@@ -330,6 +331,7 @@ int read (void *esp) {
       lock_release(&fs_lock);
       exit_impl(-1);
     }
+      // entry_p->pinning = true;
   }
   size = file_read(file, buffer, size);
   for (int i = 0; i < size; i += PGSIZE)

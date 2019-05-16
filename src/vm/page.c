@@ -160,11 +160,11 @@ bool handle_page_fault(void *upage, void *esp)
 {
     void *addr = pg_round_down(upage);
     struct spt_entry *entry_p = fetch_spt_entry(addr);
-    // printf("handle pf %p, %p, %d, %p\n", addr, esp, addr > esp-PGSIZE, entry_p);
+    // printf("handle pf %p, %p, %d, %p\n", upage, esp, addr > esp-400*PGSIZE, entry_p);
     if (entry_p == NULL)
     {
         // printf("handle pf1\n");
-        if (addr > esp -  PGSIZE)
+        if (upage >= esp - 32)
             grow_stack(addr);
         else
             return false;

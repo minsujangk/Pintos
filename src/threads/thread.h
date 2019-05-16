@@ -133,6 +133,7 @@ struct thread
     struct lock spt_lock; 
     struct file *exe_file;
     struct list mm_list;
+    void *sys_esp;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

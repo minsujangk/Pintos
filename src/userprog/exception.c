@@ -160,10 +160,10 @@ page_fault(struct intr_frame *f)
    //        not_present ? "not present" : "rights violation",
    //        write ? "writing" : "reading",
    //        user ? "user" : "kernel");
-   // void *esp = (f->esp != NULL) ? f->esp : thread_current()->stack 
+   void *esp = user ? f->esp : thread_current()->sys_esp; 
    if (!not_present) exit_impl(-1);
    if (not_present & is_user_vaddr(fault_addr) && fault_addr > 0x804800)
-      handle_page_fault(fault_addr, f->esp);
+      handle_page_fault(fault_addr, esp);
 
    if (!check_valid_pointer(fault_addr))
    {
