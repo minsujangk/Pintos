@@ -318,7 +318,8 @@ int read (void *esp) {
     return -1;
   }
   void *upage = pg_round_down(buffer);
-  for (int i = 0; i < size; i += PGSIZE)
+  int i;
+  for ( i = 0; i < size; i += PGSIZE)
   {
     struct spt_entry *entry_p = fetch_spt_entry(upage + i);
   
@@ -334,7 +335,7 @@ int read (void *esp) {
       // entry_p->pinning = true;
   }
   size = file_read(file, buffer, size);
-  for (int i = 0; i < size; i += PGSIZE)
+  for ( i = 0; i < size; i += PGSIZE)
   {
     struct spt_entry *entry_p = fetch_spt_entry(upage + i);
     // entry_p->pinning = false;
@@ -388,7 +389,8 @@ int write (void *esp) {
 
   if (file == NULL) return -1;
   void *upage = pg_round_down(buffer);
-  for (int i = 0; i < size; i += PGSIZE)
+  int i;
+  for (i = 0; i < size; i += PGSIZE)
   {
     struct spt_entry *entry_p = fetch_spt_entry(upage + i);
     if (entry_p == NULL)
@@ -406,7 +408,7 @@ int write (void *esp) {
   else
     file_allow_write(ff_pick->file_ptr);
   size = file_write(ff_pick->file_ptr, buffer, size);
-  for (int i = 0; i < size; i += PGSIZE)
+  for (i = 0; i < size; i += PGSIZE)
   {
     struct spt_entry *entry_p = fetch_spt_entry(upage + i);
     entry_p->pinning = false;

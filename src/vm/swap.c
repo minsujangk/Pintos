@@ -18,7 +18,8 @@ struct swap_entry *save_swap(void *upage)
     lock_acquire(&swap_lock);
     entry_p->swap_idx = BLOCK_PER_PAGE * bitmap_scan_and_flip(swap_bitmap, 0, 1, false);
 
-    for (int i = 0; i < BLOCK_PER_PAGE; i++)
+    int i;
+    for (i = 0; i < BLOCK_PER_PAGE; i++)
     {
         disk_write(swap_disk, entry_p->swap_idx + i, upage + i * DISK_SECTOR_SIZE);
     }
@@ -28,7 +29,8 @@ struct swap_entry *save_swap(void *upage)
 
 void load_swap(void *kpage, struct swap_entry *entry_p)
 {
-    for (int i = 0; i < BLOCK_PER_PAGE; i++)
+    int i;
+    for (i = 0; i < BLOCK_PER_PAGE; i++)
     {
         disk_read(swap_disk, entry_p->swap_idx + i, kpage + i * DISK_SECTOR_SIZE);
     }
