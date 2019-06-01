@@ -6,8 +6,10 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "threads/palloc.h"
 
 #include "filesys/cache.h"
+#include <debug.h>
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -223,17 +225,14 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       if (chunk_size <= 0)
         break;
 
-      void *buf_addr = buffer_fetch(sector_idx);
-      if (buf_addr == NULL)
-      {
-        buf_addr = buffer_insert(sector_idx, true);
-        disk_read (filesys_disk, sector_idx, buf_addr);
-      }
+      void *buf_addr = buffer_fetch_or_insert(sector_idx, false);
 
-      printf("reaD AT %d: %d\n",sector_idx, offset);
+      // printf("reaD AT sector=%d, %d: %p\n",sector_idx, offset, buf_addr);
+
 
       memcpy(buffer + bytes_read, buf_addr + sector_ofs, chunk_size);
 
+      // hex_dump (0, buf_addr + sector_ofs, 32, true); 
       // if (sector_ofs == 0 && chunk_size == DISK_SECTOR_SIZE) 
       //   {
       //     /* Read full sector directly into caller's buffer. */
@@ -295,12 +294,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       if (chunk_size <= 0)
         break;
 
-      void *buf_addr = buffer_fetch(sector_idx);
-      if (buf_addr == NULL)
-      {
-        buf_addr = buffer_insert(sector_idx, true);
-        disk_read (filesys_disk, sector_idx, buf_addr);
-      }
+      void *buf_addr = buffer_fetch_or_insert(sector_idx, true);
 
       memcpy(buf_addr + sector_ofs, buffer + bytes_written, chunk_size);
 

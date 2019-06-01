@@ -264,7 +264,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
-  // if (isdebug) printf("load filename: %s\n", file_name);
+  if (isdebug) printf("load filename: %s\n", file_name);
   char *token, *save_ptr;
   char *arg_tokens[128];
   int token_num = 0;
@@ -303,7 +303,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
-      if (isdebug) printf ("load: %s: error loading executable\n", file_name);
+      if (isdebug) printf ("load: %s: error loading executable%d\n", file_name,
+      memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7));
       goto done; 
     }
 
