@@ -13,6 +13,7 @@
 #include "userprog/process.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 #include "threads/malloc.h"
 #include "vm/page.h"
 
@@ -402,8 +403,12 @@ int write (void *esp) {
     exit_impl(-1);
   }
 
+  if (inode_is_dir(file_get_inode(file)))
+  {
+    lock_release(&fs_lock);
+    return -1;
+  }
 
-  if (file == NULL) return -1;
   void *upage = pg_round_down(buffer);
   int i;
   for (i = 0; i < size; i += PGSIZE)

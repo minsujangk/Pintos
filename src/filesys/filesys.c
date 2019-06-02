@@ -50,7 +50,7 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
   disk_sector_t inode_sector = 0;
   // struct dir *dir = dir_open_root ();
   // struct dir *dir = dir_open(inode_open(thread_current()->dir_sector));
-  char *last_name;
+  char *last_name = NULL;
   struct dir *cur_dir = dir_find(name, true, &last_name);
   
   bool success = (cur_dir != NULL
@@ -78,18 +78,29 @@ filesys_open (const char *name)
 {
   // struct dir *dir = dir_open_root ();
   // struct dir *dir = dir_open(inode_open(thread_current()->dir_sector));
-  char *last_name;
+  char *last_name = NULL;
   struct dir *cur_dir = dir_find(name, true, &last_name);
   struct inode *inode = NULL;
+  // printf("opening %s, %p, %s\n", name, cur_dir,last_name);
 
-  if (cur_dir != NULL)
-    dir_lookup (cur_dir, last_name, &inode);
-  if (cur_dir != NULL)
-  {
-    dir_close(cur_dir);
+  if (cur_dir == NULL)
+    return NULL;
+
+  if (dir_check_root(cur_dir) && last_name == NULL)
+    return cur_dir;
+
+
+  if (last_name == NULL)
+    dir_lookup(cur_dir, "", &inode);
+  else
+    dir_lookup(cur_dir, last_name, &inode);
+
+  dir_close(cur_dir);
+
+  if (last_name != NULL)
     free(last_name);
-  }
 
+  // printf("result %p\n", inode);
 
   return file_open (inode);
 }
@@ -103,8 +114,14 @@ filesys_remove (const char *name)
 {
   // struct dir *dir = dir_open_root ();
   // struct dir *dir = dir_open(inode_open(thread_current()->dir_sector));
-  char *last_name;
+  char *last_name = NULL;
   struct dir *cur_dir = dir_find(name, true, &last_name);
+  // printf("removing %s, %p, %p\n", name, cur_dir, last_name);
+  if (dir_check_root(cur_dir) && last_name == NULL) {
+    dir_close(cur_dir);
+    return false;
+  }
+
   bool success = cur_dir != NULL && dir_remove (cur_dir, last_name);
   if (cur_dir != NULL)
   {

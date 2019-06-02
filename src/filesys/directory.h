@@ -29,5 +29,7 @@ bool dir_readdir (struct dir *, char name[NAME_MAX + 1]);
 
 // Path
 struct dir *dir_find(char *, bool, char **);
+bool dir_check_emtpy(struct inode *dir_inode);
+bool dir_check_root(struct dir *dir);
 
 #endif /* filesys/directory.h */

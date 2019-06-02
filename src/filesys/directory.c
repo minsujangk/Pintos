@@ -58,6 +58,11 @@ dir_open_root (void)
   return dir_open (inode_open (ROOT_DIR_SECTOR));
 }
 
+bool dir_check_root(struct dir *dir)
+{
+  return inode_get_inumber(dir->inode) == ROOT_DIR_SECTOR;
+}
+
 /* Opens and returns a new directory for the same inode as DIR.
    Returns a null pointer on failure. */
 struct dir *
@@ -124,7 +129,6 @@ dir_lookup (const struct dir *dir, const char *name,
 
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
-
   if (lookup (dir, name, &e, NULL))
     *inode = inode_open (e.inode_sector);
   else
@@ -202,6 +206,9 @@ dir_remove (struct dir *dir, const char *name)
   if (inode == NULL)
     goto done;
 
+  if (inode_is_dir(inode) && !dir_check_emtpy(inode))
+    goto done;
+
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e) 
@@ -260,9 +267,10 @@ dir_find(char *path, bool exclude_last, char **last_name)
   {
     if (token == NULL)
       break;
-      
+
     token_next = strtok_r(NULL, "/", &save_ptr);
-    if (token_next == NULL && last_name != NULL){
+    if (token_next == NULL && last_name != NULL)
+    {
       char *text = malloc(strlen(token) + 1);
       strlcpy(text, token, strlen(token) + 1);
       *last_name = text;
@@ -288,4 +296,20 @@ dir_find(char *path, bool exclude_last, char **last_name)
     }
   }
   return cur_dir;
+}
+
+bool dir_check_emtpy(struct inode *dir_inode)
+{
+  struct dir_entry e;
+  off_t pos = 0;
+
+  while (inode_read_at(dir_inode, &e, sizeof e, pos) == sizeof e)
+  {
+    if (e.in_use)
+    {
+      return false;
+    }
+    pos += sizeof e;
+  }
+  return true;
 }
