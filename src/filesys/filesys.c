@@ -7,6 +7,7 @@
 #include "filesys/inode.h"
 #include "filesys/directory.h"
 #include "devices/disk.h"
+#include "threads/thread.h"
 
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
@@ -44,17 +45,25 @@ filesys_done (void)
    Fails if a file named NAME already exists,
    or if internal memory allocation fails. */
 bool
-filesys_create (const char *name, off_t initial_size) 
+filesys_create (const char *name, off_t initial_size, bool is_dir) 
 {
   disk_sector_t inode_sector = 0;
-  struct dir *dir = dir_open_root ();
-  bool success = (dir != NULL
+  // struct dir *dir = dir_open_root ();
+  // struct dir *dir = dir_open(inode_open(thread_current()->dir_sector));
+  char *last_name;
+  struct dir *cur_dir = dir_find(name, true, &last_name);
+  
+  bool success = (cur_dir != NULL
                   && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size)
-                  && dir_add (dir, name, inode_sector));
+                  && inode_create (inode_sector, initial_size, is_dir)
+                  && dir_add (cur_dir, last_name, inode_sector));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
-  dir_close (dir);
+  if (cur_dir != NULL)
+  {
+    dir_close(cur_dir);
+    free(last_name);
+  }
 
   return success;
 }
@@ -67,12 +76,20 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
-  struct dir *dir = dir_open_root ();
+  // struct dir *dir = dir_open_root ();
+  // struct dir *dir = dir_open(inode_open(thread_current()->dir_sector));
+  char *last_name;
+  struct dir *cur_dir = dir_find(name, true, &last_name);
   struct inode *inode = NULL;
 
-  if (dir != NULL)
-    dir_lookup (dir, name, &inode);
-  dir_close (dir);
+  if (cur_dir != NULL)
+    dir_lookup (cur_dir, last_name, &inode);
+  if (cur_dir != NULL)
+  {
+    dir_close(cur_dir);
+    free(last_name);
+  }
+
 
   return file_open (inode);
 }
@@ -84,9 +101,17 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name) 
 {
-  struct dir *dir = dir_open_root ();
-  bool success = dir != NULL && dir_remove (dir, name);
-  dir_close (dir); 
+  // struct dir *dir = dir_open_root ();
+  // struct dir *dir = dir_open(inode_open(thread_current()->dir_sector));
+  char *last_name;
+  struct dir *cur_dir = dir_find(name, true, &last_name);
+  bool success = cur_dir != NULL && dir_remove (cur_dir, last_name);
+  if (cur_dir != NULL)
+  {
+    dir_close(cur_dir);
+    free(last_name);
+  }
+
 
   return success;
 }
@@ -101,4 +126,18 @@ do_format (void)
     PANIC ("root directory creation failed");
   free_map_close ();
   printf ("done.\n");
+}
+
+bool filesys_chdir(char *dir)
+{
+  struct dir *target_dir = dir_find(dir, false, NULL);
+
+  if (target_dir == NULL)
+  {
+    return false;
+  }
+  else
+  {
+    thread_current()->dir_sector = inode_get_inumber(dir_get_inode(target_dir));
+  }
 }

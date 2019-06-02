@@ -78,6 +78,7 @@ start_process (void *f_name)
         cstat->child_pid = -1;
         cstat->exit_status = -1;
       }
+      thread_current()->dir_sector = cstat->dir_sector;
       sema_up(&cstat->sema_start);
       break;
     }

@@ -5,6 +5,7 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 
 /* A directory. */
 struct dir 
@@ -26,7 +27,7 @@ struct dir_entry
 bool
 dir_create (disk_sector_t sector, size_t entry_cnt) 
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -233,4 +234,58 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
         } 
     }
   return false;
+}
+
+struct dir *
+dir_find(char *path, bool exclude_last, char **last_name)
+{
+  struct dir* cur_dir;
+
+  if (strlen(path) <= 0)
+    return NULL;
+  if (path[0] == '/')
+    cur_dir = dir_open_root();
+  else
+    cur_dir = dir_open(inode_open(thread_current()->dir_sector));
+
+  char dir_path[strlen(path) + 1];
+  strlcpy(dir_path, path, strlen(path) + 1);
+
+  char *token, *save_ptr;
+  char *token_next;
+
+  token = strtok_r(dir_path, "/", &save_ptr);
+  for (; ;
+       token = token_next)
+  {
+    if (token == NULL)
+      break;
+      
+    token_next = strtok_r(NULL, "/", &save_ptr);
+    if (token_next == NULL && last_name != NULL){
+      char *text = malloc(strlen(token) + 1);
+      strlcpy(text, token, strlen(token) + 1);
+      *last_name = text;
+    }
+
+    if (exclude_last && token_next == NULL)
+      break;
+    struct inode* dir_inode;
+    bool is_exist = dir_lookup(cur_dir, token, &dir_inode);
+    if (!is_exist)
+      return NULL;
+
+
+    if (inode_is_dir(dir_inode))
+    {
+      dir_close(cur_dir);
+      cur_dir = dir_open(dir_inode);
+    }
+    else
+    {
+      inode_close(dir_inode);
+      return NULL;
+    }
+  }
+  return cur_dir;
 }

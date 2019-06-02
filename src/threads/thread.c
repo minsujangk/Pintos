@@ -14,6 +14,9 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#include "filesys/directory.h"
+#include "filesys/inode.h"
+#include "filesys/filesys.h"
 
 
 /* Random value for struct thread's `magic' member.
@@ -710,6 +713,8 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->holding_locks);
   list_init(&t->spage_table);
   lock_init(&t->spt_lock);
+
+  t->dir_sector = ROOT_DIR_SECTOR;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

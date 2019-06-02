@@ -23,13 +23,14 @@ struct inode_disk
     disk_sector_t start;                /* First data sector. */
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[108];               /* Not used. */
+    uint32_t unused[107];               /* Not used. */
 
     uint32_t direct_idx;
     uint32_t indirect_idx;
     uint32_t d_indirect_idx;
 
     disk_sector_t sectors[14];
+    int is_dir;
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -124,7 +125,7 @@ inode_init (void)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (disk_sector_t sector, off_t length)
+inode_create (disk_sector_t sector, off_t length, bool is_dir)
 {
   struct inode_disk *disk_inode = NULL;
   bool success = false;
@@ -154,6 +155,7 @@ inode_create (disk_sector_t sector, off_t length)
       //       }
       //     success = true; 
       //   }
+      disk_inode->is_dir = is_dir;
       inode_grow(disk_inode, length);
       disk_write (filesys_disk, sector, disk_inode);
       success = true;
@@ -433,10 +435,10 @@ inode_length (const struct inode *inode)
   return inode->data.length;
 }
 
-// void inode_make(struct inode_disk *inode_disk)
-// {
-//   inode_grow(inode_disk, inode_disk->length);
-// }
+bool inode_is_dir(struct inode *inode)
+{
+  return inode->data.is_dir;
+}
 
 void inode_grow(struct inode_disk *inode_disk, int length)
 {

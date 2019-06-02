@@ -22,6 +22,7 @@ struct child_status {
   int exit_status;
   struct semaphore sema_start;
   struct list_elem elem;
+  uint32_t dir_sector;
 };
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
@@ -134,6 +135,9 @@ struct thread
     struct file *exe_file;
     struct list mm_list;
     void *sys_esp;
+
+    // struct inode *cur_dir;
+    uint32_t dir_sector;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

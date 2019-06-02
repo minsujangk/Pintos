@@ -89,6 +89,21 @@ syscall_handler (struct intr_frame *f)
     case SYS_MUNMAP:
       munmap(arg_addr);
       break;
+    case SYS_CHDIR:
+      f->eax = chdir(arg_addr);
+    break;
+    case SYS_MKDIR:
+      f->eax = mkdir(arg_addr);
+    break;
+    case SYS_READDIR:
+      f->eax = readdir(arg_addr);
+    break;
+    case SYS_ISDIR:
+      f->eax = isdir(arg_addr);
+    break;
+    case SYS_INUMBER:
+      f->eax = inumber(arg_addr);
+    break;
     }
 }
 
@@ -156,6 +171,7 @@ tid_t exec (void *esp) {
   cstat->parent_pid = thread_tid();
   cstat->child_pid = pid;
   cstat->exit_status = 1000;
+  cstat->dir_sector = thread_current()->dir_sector;
   sema_init(&cstat->sema_start, 0);
   
   list_push_back(&parent_child_list, &cstat->elem);
@@ -207,7 +223,7 @@ create (void *esp) {
     exit(-1);
 
   lock_acquire(&fs_lock);
-  bool returnVal = filesys_create(file_name, initial_size);
+  bool returnVal = filesys_create(file_name, initial_size, false);
   lock_release(&fs_lock);
   // printf("create is: %s, %d, %d\n", file_name, initial_size, returnVal);
   return returnVal;
@@ -565,6 +581,48 @@ void munmap (void *esp) {
   return;
 }
 
+// bool chdir (const char *dir)
+int chdir (void *esp) {
+  if (!is_valid_pointer(esp, 4)) exit(-1);
+
+  char *dir = *(char**)esp;
+  
+  return filesys_chdir(dir);
+}
+
+// bool mkdir (const char *dir)
+int mkdir (void *esp) {
+  if (!is_valid_pointer(esp, 4)) exit(-1);
+
+  char *dir = *(char**)esp;
+  
+  filesys_create(dir, 0, true);
+  
+}
+
+// bool readdir (int fd, char *name)
+int readdir (void *esp) {
+  int fd = *(int*) (esp + 12);
+  char* addr = *(char**) (esp + 16);
+  
+}
+
+// bool isdir (int fd)
+int isdir (void *esp) {
+  if (!is_valid_pointer(esp, 4)) exit(-1);
+
+  int fd = *(int*)esp;
+  
+}
+
+// int inumber (int fd)
+int inumber (void *esp) {
+  if (!is_valid_pointer(esp, 4)) exit(-1);
+
+  int fd = *(int*)esp;
+  
+  
+}
 void _close_all_fd (void) {
   struct list *fd_list = &thread_current()->fd_list;
   struct list_elem *e, *next;
