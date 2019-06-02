@@ -6,6 +6,8 @@ int buffer_evict(void);
 void *buffer_pool_addr(int pool_idx);
 bool buffer_less_func(struct list_elem *a, struct list_elem *b);
 
+bool cache_debug = false;
+
 void buffer_init(void)
 {
     list_init(&buffer_cache_list);
@@ -16,6 +18,8 @@ void buffer_init(void)
 
 void *buffer_fetch_or_insert(disk_sector_t sector_idx, bool is_dirty)
 {
+    if (cache_debug)
+        printf("여기는? %d\n", sector_idx);
     lock_acquire(&filesys_cache_lock);
     void *buf_addr = buffer_fetch(sector_idx, is_dirty);
     if (buf_addr == NULL)

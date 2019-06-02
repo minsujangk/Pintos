@@ -14,6 +14,8 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
+bool inode_debug = false;
+
 /* On-disk inode.
    Must be exactly DISK_SECTOR_SIZE bytes long. */
 struct inode_disk
@@ -21,7 +23,13 @@ struct inode_disk
     disk_sector_t start;                /* First data sector. */
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[125];               /* Not used. */
+    uint32_t unused[108];               /* Not used. */
+
+    uint32_t direct_idx;
+    uint32_t indirect_idx;
+    uint32_t d_indirect_idx;
+
+    disk_sector_t sectors[14];
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -51,15 +59,56 @@ static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) 
 {
   ASSERT (inode != NULL);
-  if (pos < inode->data.length)
-    return inode->data.start + pos / DISK_SECTOR_SIZE;
-  else
+  //   return inode->data.start + pos / DISK_SECTOR_SIZE;
+  // else
+  //   return -1;
+  if (inode_debug)
+    printf("btos %d\n", pos);
+  if (pos >= inode->data.length)
     return -1;
+
+  if (pos < 12 * DISK_SECTOR_SIZE)
+  {
+    // direct
+    if (inode_debug)
+      printf("direct idx=%d\n", pos / DISK_SECTOR_SIZE);
+    return inode->data.sectors[pos / DISK_SECTOR_SIZE];
+  }
+  else if (pos < (12 + 128) * DISK_SECTOR_SIZE)
+  {
+    // indirect
+    disk_sector_t indirect_sectors[128];
+
+    disk_read(filesys_disk, inode->data.sectors[12], indirect_sectors);
+
+    disk_sector_t idx = (pos - 12 * DISK_SECTOR_SIZE) / DISK_SECTOR_SIZE;
+    if (inode_debug)
+      printf("indirect idx=%d\n", idx);
+    return indirect_sectors[idx];
+  }
+  else if (pos < (12 + 128 + 128 * 128) * DISK_SECTOR_SIZE)
+  {
+    // double indirect
+    
+    disk_sector_t indirect_sectors_1[128];
+    disk_sector_t indirect_sectors_2[128];
+
+    disk_read(filesys_disk, inode->data.sectors[13], indirect_sectors_1);
+
+    int indirect_sector_num_2 = (pos - (12 + 128) * DISK_SECTOR_SIZE) /
+                                          (128 * DISK_SECTOR_SIZE);
+    disk_read(filesys_disk, indirect_sectors_1[indirect_sector_num_2], indirect_sectors_2);
+
+    disk_sector_t idx = (pos - (12 + 128 + 128 * indirect_sector_num_2) * DISK_SECTOR_SIZE) / DISK_SECTOR_SIZE;
+
+    return indirect_sectors_2[idx];
+  }
 }
 
 /* List of open inodes, so that opening a single inode twice
    returns the same `struct inode'. */
 static struct list open_inodes;
+void inode_grow(struct inode_disk *inode_disk, int length);
 
 /* Initializes the inode module. */
 void
@@ -92,19 +141,23 @@ inode_create (disk_sector_t sector, off_t length)
       size_t sectors = bytes_to_sectors (length);
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
-      if (free_map_allocate (sectors, &disk_inode->start))
-        {
-          disk_write (filesys_disk, sector, disk_inode);
-          if (sectors > 0) 
-            {
-              static char zeros[DISK_SECTOR_SIZE];
-              size_t i;
+      // if (free_map_allocate (sectors, &disk_inode->start))
+      //   {
+      //     disk_write (filesys_disk, sector, disk_inode);
+      //     if (sectors > 0) 
+      //       {
+      //         static char zeros[DISK_SECTOR_SIZE];
+      //         size_t i;
               
-              for (i = 0; i < sectors; i++) 
-                disk_write (filesys_disk, disk_inode->start + i, zeros); 
-            }
-          success = true; 
-        } 
+      //         for (i = 0; i < sectors; i++) 
+      //           disk_write (filesys_disk, disk_inode->start + i, zeros); 
+      //       }
+      //     success = true; 
+      //   }
+      inode_grow(disk_inode, length);
+      disk_write (filesys_disk, sector, disk_inode);
+      success = true;
+
       free (disk_inode);
     }
   return success;
@@ -182,8 +235,9 @@ inode_close (struct inode *inode)
       if (inode->removed) 
         {
           free_map_release (inode->sector, 1);
-          free_map_release (inode->data.start,
-                            bytes_to_sectors (inode->data.length)); 
+          // free_map_release (inode->data.start,
+          //                   bytes_to_sectors (inode->data.length)); 
+          // free all sub blocks.
         }
 
       free (inode); 
@@ -278,6 +332,11 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   if (inode->deny_write_cnt)
     return 0;
 
+  if (offset + size > inode->data.length)
+  {
+    inode_grow(&inode->data, offset + size - inode_length(inode));
+  }
+
   while (size > 0) 
     {
       /* Sector to write, starting byte offset within sector. */
@@ -294,6 +353,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       if (chunk_size <= 0)
         break;
 
+      if (inode_debug)
+        printf("write AT sector=%d, %d, %d\n", sector_idx, offset, size);
       void *buf_addr = buffer_fetch_or_insert(sector_idx, true);
 
       memcpy(buf_addr + sector_ofs, buffer + bytes_written, chunk_size);
@@ -360,4 +421,131 @@ off_t
 inode_length (const struct inode *inode)
 {
   return inode->data.length;
+}
+
+// void inode_make(struct inode_disk *inode_disk)
+// {
+//   inode_grow(inode_disk, inode_disk->length);
+// }
+
+void inode_grow(struct inode_disk *inode_disk, int length)
+{
+  static char zeros[DISK_SECTOR_SIZE];
+  int sector_left = length / DISK_SECTOR_SIZE + 1;
+
+  if (inode_debug)
+    printf("grow %d: %d\n", inode_disk->sectors[0], sector_left);
+
+  if (inode_disk->direct_idx < 12)
+  {
+    // direct index
+    while (sector_left > 0)
+    {
+      free_map_allocate(1, &inode_disk->sectors[inode_disk->direct_idx]);
+      if (inode_debug)
+        printf("growing direct %d left=%d\n", inode_disk->sectors[inode_disk->direct_idx], sector_left);
+      inode_disk->direct_idx++;
+      sector_left--;
+      if(inode_disk->direct_idx == 12) break;
+    }
+  }
+  if (inode_disk->direct_idx == 12)
+  {
+    disk_sector_t indirect_map[128];
+    // indirect index
+    if (inode_disk->indirect_idx == 0)
+    {
+      // initialize indirect index
+      free_map_allocate(1, &inode_disk->sectors[inode_disk->direct_idx]);
+    }
+    else
+    {
+      disk_read(filesys_disk, inode_disk->sectors[inode_disk->direct_idx],
+                indirect_map);
+    }
+    if (inode_debug)
+      printf("indirect sector=%d\n", inode_disk->sectors[inode_disk->direct_idx]);
+
+    while (sector_left > 0)
+    {
+      free_map_allocate(1, &indirect_map[inode_disk->indirect_idx]);
+      if (inode_debug)
+        printf("growing indirect %d left=%d\n", indirect_map[inode_disk->indirect_idx], sector_left);
+      disk_write(filesys_disk, indirect_map[inode_disk->indirect_idx], zeros);
+      inode_disk->indirect_idx++;
+      sector_left--;
+      if (inode_disk->indirect_idx == 128)
+        break;
+    }
+
+    disk_write(filesys_disk, inode_disk->sectors[inode_disk->direct_idx],
+               indirect_map);
+
+    if (inode_disk->indirect_idx == 128)
+    {
+      inode_disk->indirect_idx = 0;
+      inode_disk->direct_idx++;
+    }
+  }
+  if (inode_disk->direct_idx == 13)
+  {
+    // double indirect index
+    disk_sector_t indirect_map_1[128];
+    disk_sector_t indirect_map_2[128];
+    // indirect index
+    if (inode_disk->d_indirect_idx == 0 && inode_disk->indirect_idx == 0)
+    {
+      // initialize indirect index
+      free_map_allocate(1, &inode_disk->sectors[inode_disk->direct_idx]);
+    }
+    else
+    {
+      disk_read(filesys_disk, inode_disk->sectors[inode_disk->direct_idx],
+                indirect_map_1);
+    }
+
+    while (inode_disk->indirect_idx < 128 && sector_left > 0)
+    {
+      if (inode_disk->d_indirect_idx == 0)
+      {
+        // initialize indirect index
+        free_map_allocate(1, &indirect_map_1[inode_disk->indirect_idx]);
+      }
+      else
+      {
+        disk_read(filesys_disk, indirect_map_1[inode_disk->indirect_idx],
+                  indirect_map_2);
+      }
+
+      while (sector_left > 0)
+      {
+        free_map_allocate(1, &indirect_map_2[inode_disk->d_indirect_idx]);
+        if (inode_debug)
+          printf("growing double indirect %d left=%d\n", indirect_map_2[inode_disk->d_indirect_idx], sector_left);
+        disk_write(filesys_disk, indirect_map_2[inode_disk->d_indirect_idx], zeros);
+        inode_disk->d_indirect_idx++;
+        sector_left--;
+        if (inode_disk->d_indirect_idx == 128)
+          break;
+      }
+      // save double indirect map
+      disk_write(filesys_disk, indirect_map_1[inode_disk->indirect_idx],
+                 indirect_map_2);
+      if (inode_disk->d_indirect_idx == 128)
+      {
+        inode_disk->d_indirect_idx = 0;
+        inode_disk->indirect_idx++;
+      }
+    }
+
+    disk_write(filesys_disk, inode_disk->sectors[inode_disk->direct_idx],
+               indirect_map_1);
+
+    if (inode_disk->indirect_idx == 128)
+    {
+      inode_disk->indirect_idx = 0;
+      inode_disk->direct_idx++;
+    }
+
+  }
 }

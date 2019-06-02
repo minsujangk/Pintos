@@ -219,6 +219,7 @@ disk_size (struct disk *d)
 void
 disk_read (struct disk *d, disk_sector_t sec_no, void *buffer) 
 {
+  // printf("her22? %s, %d\n", d->name, sec_no);
   struct channel *c;
   
   ASSERT (d != NULL);
@@ -431,6 +432,7 @@ print_ata_string (char *string, size_t size)
 static void
 select_sector (struct disk *d, disk_sector_t sec_no) 
 {
+  // printf("here? %s, %d\n", d->name, sec_no);
   struct channel *c = d->channel;
 
   ASSERT (sec_no < d->capacity);
