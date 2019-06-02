@@ -354,7 +354,7 @@ int write (void *esp) {
   int fd = *(int*) esp;
   void *buffer = *(void**) (esp + 4);
   unsigned size = *(unsigned*) (esp + 8);
-  // printf("write started %d, %p, %d\n", fd, buffer, size);
+  // printf("\nwrite started %d, %p, %d\n", fd, buffer, size);
 
   if (buffer > PHYS_BASE)
   {

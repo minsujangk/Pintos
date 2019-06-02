@@ -139,7 +139,7 @@ inode_create (disk_sector_t sector, off_t length)
   if (disk_inode != NULL)
     {
       size_t sectors = bytes_to_sectors (length);
-      disk_inode->length = length;
+      disk_inode->length = 0;
       disk_inode->magic = INODE_MAGIC;
       // if (free_map_allocate (sectors, &disk_inode->start))
       //   {
@@ -239,6 +239,11 @@ inode_close (struct inode *inode)
           //                   bytes_to_sectors (inode->data.length)); 
           // free all sub blocks.
         }
+      else
+      {
+        disk_write(filesys_disk, inode->sector, &inode->data);
+      }
+      
 
       free (inode); 
     }
@@ -331,11 +336,14 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
   if (inode->deny_write_cnt)
     return 0;
+  // printf("\ninode write ofs=%d, %d\n", offset, size);
 
   if (offset + size > inode->data.length)
   {
     inode_grow(&inode->data, offset + size - inode_length(inode));
   }
+
+  // printf("grow end %d\n\n", size);
 
   while (size > 0) 
     {
@@ -350,6 +358,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
       /* Number of bytes to actually write into this sector. */
       int chunk_size = size < min_left ? size : min_left;
+        // printf("debug=%d, %d, %d, %d, %d\n", inode_left, sector_left, size
+        // , offset, inode_length (inode));
       if (chunk_size <= 0)
         break;
 
@@ -436,6 +446,8 @@ void inode_grow(struct inode_disk *inode_disk, int length)
   if (inode_debug)
     printf("grow %d: %d\n", inode_disk->sectors[0], sector_left);
 
+  inode_disk->length += length;
+
   if (inode_disk->direct_idx < 12)
   {
     // direct index
@@ -443,10 +455,11 @@ void inode_grow(struct inode_disk *inode_disk, int length)
     {
       free_map_allocate(1, &inode_disk->sectors[inode_disk->direct_idx]);
       if (inode_debug)
-        printf("growing direct %d left=%d\n", inode_disk->sectors[inode_disk->direct_idx], sector_left);
+        printf("growing direct %d left=%d\n", inode_disk->direct_idx, sector_left);
       inode_disk->direct_idx++;
       sector_left--;
-      if(inode_disk->direct_idx == 12) break;
+      if (inode_disk->direct_idx == 12)
+        break;
     }
   }
   if (inode_disk->direct_idx == 12)
