@@ -27,7 +27,7 @@ struct dir_entry
 bool
 dir_create (disk_sector_t sector, size_t entry_cnt) 
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true, NULL);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -196,7 +196,7 @@ dir_remove (struct dir *dir, const char *name)
 
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
-
+  // printf("dir_remove %s\n", name);
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
     goto done;
@@ -208,7 +208,6 @@ dir_remove (struct dir *dir, const char *name)
 
   if (inode_is_dir(inode) && !dir_check_emtpy(inode))
     goto done;
-
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e) 
@@ -218,6 +217,10 @@ dir_remove (struct dir *dir, const char *name)
   inode_remove (inode);
   success = true;
 
+  if (e.inode_sector == thread_current()->dir_sector)
+    thread_current()->dir_sector = NULL;
+
+  // printf("remov %p, %s, %d, %d\n", dir, name,e.inode_sector,thread_current()->dir_sector);
  done:
   inode_close (inode);
   return success;
@@ -253,8 +256,16 @@ dir_find(char *path, bool exclude_last, char **last_name)
   if (path[0] == '/')
     cur_dir = dir_open_root();
   else
-    cur_dir = dir_open(inode_open(thread_current()->dir_sector));
+  {
+    if (thread_current()->dir_sector == NULL)
+      return NULL;
 
+    cur_dir = dir_open(inode_open(thread_current()->dir_sector));
+  }
+
+  // printf("dir_find cur_dir=%p, %s, %d, p=%d\n", cur_dir, path,
+  // inode_get_inumber(dir_get_inode(cur_dir)), 
+  // inode_get_inumber(inode_open_parent(dir_get_inode(cur_dir))));
   char dir_path[strlen(path) + 1];
   strlcpy(dir_path, path, strlen(path) + 1);
 
@@ -275,6 +286,17 @@ dir_find(char *path, bool exclude_last, char **last_name)
       strlcpy(text, token, strlen(token) + 1);
       *last_name = text;
     }
+
+    if (strcmp(token, "..") == 0)
+    {
+      struct inode* inode= inode_open_parent(dir_get_inode(cur_dir));
+      dir_close(cur_dir);
+      cur_dir = dir_open(inode);
+      // printf("cur dir %p\n", cur_dir);
+      continue;
+    }
+    if (strcmp(token, ".") == 0)
+      continue;
 
     if (exclude_last && token_next == NULL)
       break;

@@ -43,6 +43,7 @@ free_map_allocate (size_t cnt, disk_sector_t *sectorp)
 void
 free_map_release (disk_sector_t sector, size_t cnt)
 {
+  // printf("free map %d\n", sector);
   ASSERT (bitmap_all (free_map, sector, cnt));
   bitmap_set_multiple (free_map, sector, cnt, false);
   bitmap_write (free_map, free_map_file);
@@ -72,7 +73,7 @@ void
 free_map_create (void) 
 {
   /* Create inode. */
-  if (!inode_create (FREE_MAP_SECTOR, bitmap_file_size (free_map), false))
+  if (!inode_create (FREE_MAP_SECTOR, bitmap_file_size (free_map), false, NULL))
     PANIC ("free map creation failed");
 
   /* Write bitmap to file. */

@@ -23,7 +23,7 @@ struct inode_disk
     disk_sector_t start;                /* First data sector. */
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[107];               /* Not used. */
+    uint32_t unused[106];               /* Not used. */
 
     uint32_t direct_idx;
     uint32_t indirect_idx;
@@ -31,6 +31,7 @@ struct inode_disk
 
     disk_sector_t sectors[14];
     int is_dir;
+    disk_sector_t parent;
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -125,7 +126,7 @@ inode_init (void)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (disk_sector_t sector, off_t length, bool is_dir)
+inode_create (disk_sector_t sector, off_t length, bool is_dir, disk_sector_t parent_sector)
 {
   struct inode_disk *disk_inode = NULL;
   bool success = false;
@@ -156,6 +157,8 @@ inode_create (disk_sector_t sector, off_t length, bool is_dir)
       //     success = true; 
       //   }
       disk_inode->is_dir = is_dir;
+      disk_inode->parent = parent_sector;
+      // printf("inode created sector=%d, parent=%d\n", sector, parent_sector);
       inode_grow(disk_inode, length);
       disk_write (filesys_disk, sector, disk_inode);
       success = true;
@@ -217,6 +220,13 @@ inode_get_inumber (const struct inode *inode)
   return inode->sector;
 }
 
+struct inode *
+inode_open_parent (const struct inode *inode)
+{
+  // printf("parent opening %d\n", inode->data.parent);
+  return inode_open(inode->data.parent);
+}
+
 /* Closes INODE and writes it to disk.
    If this was the last reference to INODE, frees its memory.
    If INODE was also a removed inode, frees its blocks. */
@@ -240,6 +250,56 @@ inode_close (struct inode *inode)
           // free_map_release (inode->data.start,
           //                   bytes_to_sectors (inode->data.length)); 
           // free all sub blocks.
+
+          int idx = inode->data.direct_idx;
+          while (idx >= 0)
+          {
+            if (idx < 12)
+            {
+              if(inode->data.sectors[idx] != NULL)
+              free_map_release(inode->data.sectors[idx], 1);
+                  // printf("double free %d\n",inode->data.sectors[idx]);
+            }
+            else if (idx == 12)
+            {
+              disk_sector_t indirect_map[128];
+              // indirect index
+              disk_read(filesys_disk, inode->data.sectors[idx],
+                        indirect_map);
+              int indirect_idx = inode->data.indirect_idx;
+              for (; indirect_idx >= 0; indirect_idx--)
+              {
+                free_map_release(indirect_map[indirect_idx], 1);
+              }
+              free_map_release(inode->data.sectors[idx], 1);
+            }
+            else if (idx == 13)
+            {
+              // double indirect index
+              disk_sector_t indirect_map_1[128];
+              disk_sector_t indirect_map_2[128];
+              // indirect index
+              disk_read(filesys_disk, inode->data.sectors[idx],
+                        indirect_map_1);
+
+              int indirect_idx = inode->data.indirect_idx;
+              int d_ind_idx = inode->data.d_indirect_idx;
+              for (; indirect_idx >= 0; indirect_idx--)
+              {
+                disk_read(filesys_disk, indirect_map_1[indirect_idx],
+                          indirect_map_2);
+
+                for (; d_ind_idx >= 0; d_ind_idx--)
+                {
+                  free_map_release(indirect_map_2[d_ind_idx], 1);
+                }
+                free_map_release(indirect_map_1[indirect_idx], 1);
+                d_ind_idx = 127;
+              }
+              free_map_release(inode->data.sectors[idx], 1);
+            }
+            idx--;
+          }
         }
       else
       {

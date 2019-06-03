@@ -601,7 +601,7 @@ int mkdir (void *esp) {
 
   char *dir = *(char**)esp;
   
-  filesys_create(dir, 0, true);
+  return filesys_create(dir, 0, true);
   
 }
 
@@ -610,6 +610,21 @@ int readdir (void *esp) {
   int fd = *(int*) (esp + 12);
   char* addr = *(char**) (esp + 16);
   
+  struct list *fd_list = &thread_current()->fd_list;
+  struct list_elem *e;
+  lock_acquire(&fs_lock);
+  for (e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
+  {
+    struct fd_file *ff = list_entry(e, struct fd_file, elem);
+    if (ff->fd == fd)
+    {
+      int returnVal = filesys_readdir(ff->file_ptr, addr);
+      lock_release(&fs_lock);
+      return returnVal;
+    }
+  }
+  lock_release(&fs_lock);
+  return false;
 }
 
 // bool isdir (int fd)
@@ -626,6 +641,27 @@ int inumber (void *esp) {
 
   int fd = *(int*)esp;
   
+  struct list *fd_list = &thread_current()->fd_list;
+  struct list_elem *e;
+  lock_acquire(&fs_lock);
+  for (e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
+  {
+    struct fd_file *ff = list_entry(e, struct fd_file, elem);
+    if (ff->fd == fd)
+    {
+      // int returnVal = filesys_inumber(ff->file_ptr);
+
+      struct inode *inode = file_get_inode(ff->file_ptr);
+      if (inode == NULL)
+        return -1;
+
+      int returnVal = inode_get_inumber(inode);
+      lock_release(&fs_lock);
+      return returnVal;
+    }
+  }
+  lock_release(&fs_lock);
+  return false;
   
 }
 void _close_all_fd (void) {
@@ -635,6 +671,7 @@ void _close_all_fd (void) {
   for (e=list_begin(fd_list); e!=list_end(fd_list); e=next) {
     struct fd_file *ff = list_entry(e, struct fd_file, elem);
     next = list_next(e);
+    // printf("here? : %s\n", ff->file_name);
     file_close(ff->file_ptr);
     list_remove(&ff->elem);
     free(ff);

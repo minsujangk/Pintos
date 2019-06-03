@@ -52,11 +52,15 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
   // struct dir *dir = dir_open(inode_open(thread_current()->dir_sector));
   char *last_name = NULL;
   struct dir *cur_dir = dir_find(name, true, &last_name);
-  
+
   bool success = (cur_dir != NULL
                   && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size, is_dir)
+                  && inode_create (inode_sector, initial_size, is_dir,
+                   inode_get_inumber(dir_get_inode(cur_dir)))
                   && dir_add (cur_dir, last_name, inode_sector));
+  // printf("creating %p, %d, %s@%d\n", cur_dir, inode_get_inumber(dir_get_inode(cur_dir)),
+  // last_name, inode_sector);
+  
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   if (cur_dir != NULL)
@@ -87,8 +91,10 @@ filesys_open (const char *name)
     return NULL;
 
   if (dir_check_root(cur_dir) && last_name == NULL)
-    return cur_dir;
+    return file_open(dir_get_inode(cur_dir));
 
+  if (strcmp(last_name, ".") == NULL)
+    return file_open(dir_get_inode(cur_dir));
 
   if (last_name == NULL)
     dir_lookup(cur_dir, "", &inode);
@@ -116,11 +122,12 @@ filesys_remove (const char *name)
   // struct dir *dir = dir_open(inode_open(thread_current()->dir_sector));
   char *last_name = NULL;
   struct dir *cur_dir = dir_find(name, true, &last_name);
-  // printf("removing %s, %p, %p\n", name, cur_dir, last_name);
+  // printf("removing %s, %p, %s\n", name, cur_dir, last_name);
   if (dir_check_root(cur_dir) && last_name == NULL) {
     dir_close(cur_dir);
     return false;
   }
+  
 
   bool success = cur_dir != NULL && dir_remove (cur_dir, last_name);
   if (cur_dir != NULL)
@@ -148,7 +155,7 @@ do_format (void)
 bool filesys_chdir(char *dir)
 {
   struct dir *target_dir = dir_find(dir, false, NULL);
-
+  // printf("target dir %s, %p, %d\n", dir,target_dir, inode_get_inumber(dir_get_inode(target_dir)));
   if (target_dir == NULL)
   {
     return false;
@@ -157,4 +164,35 @@ bool filesys_chdir(char *dir)
   {
     thread_current()->dir_sector = inode_get_inumber(dir_get_inode(target_dir));
   }
+  return true;
+}
+
+bool filesys_readdir(struct file *file, char *name)
+{
+  // struct dir *target_dir = dir_find(dir, false, NULL);
+  struct dir *target_dir = (struct dir*) file;
+
+  if (target_dir == NULL)
+  {
+    return false;
+  }
+  bool returnVal = dir_readdir(target_dir, name);
+  // dir_close(target_dir);
+
+  return returnVal;
+}
+
+int filesys_inumber(struct file *file)
+{
+  // struct dir *target_dir = dir_find(dir, false, NULL);
+  struct dir *target_dir = (struct dir*) file;
+
+  if (target_dir == NULL)
+  {
+    return -1;
+  }
+
+  int returnVal = inode_get_inumber(dir_get_inode(target_dir));
+
+  return returnVal;
 }
