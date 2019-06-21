@@ -161,6 +161,8 @@ fsutil_get (char **argv)
   if (buffer == NULL)
     PANIC ("couldn't allocate buffer");
 
+  // if (!filesys_create (file_name, size, false))
+  //   PANIC ("%s: create failed", file_name);
   /* Open source file. */
   src = filesys_open (file_name);
   if (src == NULL)

@@ -28,3 +28,4 @@ void *buffer_fetch_or_insert(disk_sector_t sector_idx, bool is_dirty);
 void *buffer_insert(disk_sector_t sector_idx, bool is_access, bool is_dirty);
 void *buffer_load_file(disk_sector_t sector_idx);
 void buffer_remove(struct buffer_cache *c);
+void buffer_close(void);

@@ -27,7 +27,7 @@ void *buffer_fetch_or_insert(disk_sector_t sector_idx, bool is_dirty)
         buf_addr = buffer_insert(sector_idx, true, is_dirty);
         disk_read(filesys_disk, sector_idx, buf_addr);
     }
-    
+    // printf("buffer %d in %p\n", sector_idx, buf_addr);
     // hex_dump(0, buf_addr, 64, true);
 
     lock_release(&filesys_cache_lock);
@@ -46,6 +46,7 @@ void *buffer_fetch(disk_sector_t sector_idx, bool is_dirty)
             c->access_cnt += 1;
             c->is_accessed = true;
             c->is_dirty |= is_dirty;
+    // printf("buffer fetched sector=%d, pool=%d\n", c->sector_idx, c->pool_idx);
             return buffer_pool_addr(c->pool_idx);
         }
     }
@@ -77,6 +78,7 @@ void *buffer_insert(disk_sector_t sector_idx, bool is_access, bool is_dirty)
 
 void buffer_remove(struct buffer_cache *c)
 {
+    printf("fliping %d, %d\n", c->sector_idx, c->pool_idx);
     bitmap_flip(buffer_pool, c->pool_idx);
     list_remove(&c->elem);
 }
@@ -104,6 +106,8 @@ int buffer_evict(void)
                 if (c_to_evict->is_dirty)
                 {
                     // write back
+                    // printf("write back %d to %d\n", c->pool_idx, c->sector_idx);
+                    // write back
                     disk_write(filesys_disk, c->sector_idx, buffer_pool_addr(c->pool_idx));
                 }
                 break;
@@ -112,7 +116,8 @@ int buffer_evict(void)
     }
     // struct buffer_cache *c = list_entry(list_pop_back(&buffer_cache_list), struct buffer_cache, elem);
     int pool_idx = c_to_evict->pool_idx;
-    list_remove(&c_to_evict->elem);
+    // buffer_remove(c_to_evict);
+    list_remove(&c->elem);
     // printf("evict sector=%d pool=%d\n", c_to_evict->sector_idx , pool_idx);
     free(c_to_evict);
     // struct buffer_cache *c = list_entry(list_pop_back(&buffer_cache_list), struct buffer_cache, elem);
@@ -121,6 +126,28 @@ int buffer_evict(void)
     // free(c);
 
     return pool_idx;
+}
+
+void buffer_close(void)
+{
+    lock_acquire(&filesys_cache_lock);
+    struct list_elem *e, *next;
+
+    for (e = list_begin(&buffer_cache_list); e != list_end(&buffer_cache_list);
+         e = next)
+    {
+        next = list_next(e);
+        struct buffer_cache *c = list_entry(e, struct buffer_cache, elem);
+        // printf("closing %d\n", c->sector_idx);
+        if (c->is_dirty)
+        {
+            // write back
+            // printf("write back %d to %d\n", c->pool_idx, c->sector_idx);
+            disk_write(filesys_disk, c->sector_idx, buffer_pool_addr(c->pool_idx));
+        }
+        // buffer_remove(c);
+    }
+    lock_release(&filesys_cache_lock);
 }
 
 void *buffer_pool_addr(int pool_idx)

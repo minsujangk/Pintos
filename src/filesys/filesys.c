@@ -37,6 +37,12 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
+  buffer_close();
+  
+  // char buffer[512];
+  // disk_read(filesys_disk, ROOT_DIR_SECTOR, buffer);
+  // hex_dump (0, buffer, 512, true);
+  // free(buffer);
   free_map_close ();
 }
 
@@ -60,6 +66,12 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
                   && dir_add (cur_dir, last_name, inode_sector));
   // printf("creating %p, %d, %s@%d\n", cur_dir, inode_get_inumber(dir_get_inode(cur_dir)),
   // last_name, inode_sector);
+  // char buffer[512];
+  // disk_read(filesys_disk, ROOT_DIR_SECTOR, buffer);
+  // hex_dump (0, buffer, 512, true);
+  // free(buffer);
+
+
   
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
@@ -85,8 +97,11 @@ filesys_open (const char *name)
   char *last_name = NULL;
   struct dir *cur_dir = dir_find(name, true, &last_name);
   struct inode *inode = NULL;
-  // printf("opening %s, %p, %s\n", name, cur_dir,last_name);
-
+  // printf("opening %s, %p@%d, %s\n", name, cur_dir,
+  //        inode_get_inumber(dir_get_inode(cur_dir)), last_name);
+  // char buffer[512];
+  // disk_read(filesys_disk, ROOT_DIR_SECTOR, buffer);
+  // hex_dump (0, buffer, 512, true);
   if (cur_dir == NULL)
     return NULL;
 

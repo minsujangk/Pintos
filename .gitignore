@@ -58,3 +58,4 @@ src/threads/bochsout.txt
 src/threads/bochsrc.txt
 src/userprog/build/
 .vscode/*
+src/filesys/build/

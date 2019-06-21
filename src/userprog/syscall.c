@@ -632,6 +632,28 @@ int isdir (void *esp) {
   if (!is_valid_pointer(esp, 4)) exit(-1);
 
   int fd = *(int*)esp;
+
+  struct list *fd_list = &thread_current()->fd_list;
+  struct list_elem *e;
+  lock_acquire(&fs_lock);
+  for (e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
+  {
+    struct fd_file *ff = list_entry(e, struct fd_file, elem);
+    if (ff->fd == fd)
+    {
+      // int returnVal = filesys_inumber(ff->file_ptr);
+
+      struct inode *inode = file_get_inode(ff->file_ptr);
+      if (inode == NULL)
+        return false;
+
+      int returnVal = inode_is_dir(inode);
+      lock_release(&fs_lock);
+      return returnVal;
+    }
+  }
+  lock_release(&fs_lock);
+  return false;
   
 }
 

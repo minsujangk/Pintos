@@ -140,7 +140,7 @@ inode_create (disk_sector_t sector, off_t length, bool is_dir, disk_sector_t par
   disk_inode = calloc (1, sizeof *disk_inode);
   if (disk_inode != NULL)
     {
-      size_t sectors = bytes_to_sectors (length);
+      // size_t sectors = bytes_to_sectors (length);
       disk_inode->length = 0;
       disk_inode->magic = INODE_MAGIC;
       // if (free_map_allocate (sectors, &disk_inode->start))
@@ -161,6 +161,8 @@ inode_create (disk_sector_t sector, off_t length, bool is_dir, disk_sector_t par
       // printf("inode created sector=%d, parent=%d\n", sector, parent_sector);
       inode_grow(disk_inode, length);
       disk_write (filesys_disk, sector, disk_inode);
+      // void *buf_addr = buffer_fetch_or_insert(sector, false);
+      // memcpy(buf_addr, disk_inode, 512);
       success = true;
 
       free (disk_inode);
@@ -200,7 +202,11 @@ inode_open (disk_sector_t sector)
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
+
+  // void *buf_addr = buffer_fetch_or_insert(inode->sector, false);
+  // memcpy(buffer + bytes_read, buf_addr, chunk_size);
   disk_read (filesys_disk, inode->sector, &inode->data);
+  
   return inode;
 }
 
@@ -303,7 +309,7 @@ inode_close (struct inode *inode)
         }
       else
       {
-        disk_write(filesys_disk, inode->sector, &inode->data);
+        // disk_write(filesys_disk, inode->sector, &inode->data);
       }
       
 
@@ -398,7 +404,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
   if (inode->deny_write_cnt)
     return 0;
-  // printf("\ninode write ofs=%d, %d\n", offset, size);
+  // printf("inode write ofs=%d, %d\n", offset, size);
 
   if (offset + size > inode->data.length)
   {
